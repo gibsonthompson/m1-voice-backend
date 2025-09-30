@@ -163,16 +163,16 @@ app.use((req, res) => {
   });
 });
 
-// Start server
-app.listen(PORT, () => {
+// Start server - BIND TO 0.0.0.0 FOR RAILWAY
+app.listen(PORT, '0.0.0.0', () => {
   console.log('');
   console.log('🚀 ========================================');
   console.log('🚀 M1 Voice Dashboard API');
   console.log('🚀 ========================================');
   console.log(`🚀 Server running on port ${PORT}`);
   console.log(`🚀 Environment: ${process.env.NODE_ENV}`);
-  console.log(`📡 Webhook endpoint: http://localhost:${PORT}/webhook/telnyx`);
-  console.log(`🏥 Health check: http://localhost:${PORT}/health`);
+  console.log(`📡 Webhook endpoint: http://0.0.0.0:${PORT}/webhook/telnyx`);
+  console.log(`🏥 Health check: http://0.0.0.0:${PORT}/health`);
   console.log('🚀 ========================================');
   console.log('');
 });
