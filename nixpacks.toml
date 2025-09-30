@@ -1,0 +1,11 @@
+[phases.install]
+cmds = [
+  "rm -rf node_modules package-lock.json",
+  "npm install"
+]
+
+[phases.build]
+cmds = ["echo 'No build step needed'"]
+
+[start]
+cmd = "npm start"
