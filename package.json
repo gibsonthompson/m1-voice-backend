@@ -1,0 +1,20 @@
+{
+  "name": "m1-voice-backend",
+  "version": "1.0.0",
+  "description": "M1 Voice Dashboard Backend API - Receives webhooks from Telnyx AI Assistants",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node src/index.js"
+  },
+  "keywords": ["telnyx", "voice-ai", "dashboard", "webhook"],
+  "author": "Gibson Thompson",
+  "license": "MIT",
+  "dependencies": {
+    "@supabase/supabase-js": "^2.39.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.3.1",
+    "express": "^4.18.2",
+    "telnyx": "^2.1.0"
+  }
+}
