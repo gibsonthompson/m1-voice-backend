@@ -1,11 +1,8 @@
-[phases.install]
-cmds = [
-  "rm -rf node_modules package-lock.json",
-  "npm install"
-]
+[phases.setup]
+nixPkgs = ["nodejs-20_x"]
 
-[phases.build]
-cmds = ["echo 'No build step needed'"]
+[phases.install]
+cmds = ["npm ci"]
 
 [start]
-cmd = "npm start"
+cmd = "node src/index.js"
