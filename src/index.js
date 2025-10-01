@@ -191,7 +191,7 @@ app.use((req, res) => {
 
 // CRITICAL: Start server with IPv6 binding for Railway
 // Using '::' instead of '0.0.0.0' to support Railway's networking
-app.listen(PORT, '::', () => {
+app.listen(PORT, () => {
   console.log('');
   console.log('========================================');
   console.log('M1 Voice Dashboard API');
