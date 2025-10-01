@@ -41,18 +41,44 @@ app.get('/', (req, res) => {
     endpoints: {
       webhook: 'POST /webhook/telnyx',
       health: 'GET /health',
+      healthDetailed: 'GET /health/detailed',
       calls: 'GET /api/calls/:clientId',
       singleCall: 'GET /api/call/:callId'
     }
   });
 });
 
+// Simple health check - responds immediately for Railway
 app.get('/health', (req, res) => {
-  res.json({ 
+  console.log('✅ Health check - responding immediately');
+  res.status(200).json({ 
     status: 'healthy', 
-    timestamp: new Date().toISOString(),
-    database: 'connected'
+    timestamp: new Date().toISOString()
   });
+});
+
+// Detailed health check with database connection test
+app.get('/health/detailed', async (req, res) => {
+  try {
+    console.log('🔍 Detailed health check - testing database...');
+    
+    // Test database connection
+    const { error } = await supabase.from('clients').select('count').limit(1);
+    
+    res.json({ 
+      status: 'healthy',
+      timestamp: new Date().toISOString(),
+      database: error ? 'error' : 'connected',
+      error: error ? error.message : null
+    });
+  } catch (err) {
+    console.error('❌ Database health check failed:', err);
+    res.status(500).json({
+      status: 'unhealthy',
+      database: 'error',
+      error: err.message
+    });
+  }
 });
 
 // Webhook routes
@@ -173,6 +199,7 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 Environment: ${process.env.NODE_ENV}`);
   console.log(`📡 Webhook endpoint: http://0.0.0.0:${PORT}/webhook/telnyx`);
   console.log(`🏥 Health check: http://0.0.0.0:${PORT}/health`);
+  console.log(`🔍 Detailed health: http://0.0.0.0:${PORT}/health/detailed`);
   console.log('🚀 ========================================');
   console.log('');
 });
