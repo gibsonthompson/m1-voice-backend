@@ -1,8 +1,11 @@
 [phases.setup]
-nixPkgs = ["nodejs-20_x"]
+nixPkgs = ["nodejs_20"]
 
 [phases.install]
-cmds = ["npm ci"]
+cmds = ["npm install --production=false"]
+
+[phases.build]
+cmds = ["echo 'No build step required'"]
 
 [start]
 cmd = "node src/index.js"

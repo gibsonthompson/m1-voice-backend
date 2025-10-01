@@ -35,7 +35,7 @@ app.use((req, res, next) => {
 // Routes
 app.get('/', (req, res) => {
   res.json({ 
-    status: 'M1 Voice Dashboard API is Running! 🚀',
+    status: 'M1 Voice Dashboard API is Running!',
     version: '1.0.0',
     timestamp: new Date().toISOString(),
     endpoints: {
@@ -50,7 +50,7 @@ app.get('/', (req, res) => {
 
 // Simple health check - responds immediately for Railway
 app.get('/health', (req, res) => {
-  console.log('✅ Health check - responding immediately');
+  console.log('Health check - responding immediately');
   res.status(200).json({ 
     status: 'healthy', 
     timestamp: new Date().toISOString()
@@ -60,7 +60,7 @@ app.get('/health', (req, res) => {
 // Detailed health check with database connection test
 app.get('/health/detailed', async (req, res) => {
   try {
-    console.log('🔍 Detailed health check - testing database...');
+    console.log('Detailed health check - testing database...');
     
     // Test database connection
     const { error } = await supabase.from('clients').select('count').limit(1);
@@ -72,7 +72,7 @@ app.get('/health/detailed', async (req, res) => {
       error: error ? error.message : null
     });
   } catch (err) {
-    console.error('❌ Database health check failed:', err);
+    console.error('Database health check failed:', err);
     res.status(500).json({
       status: 'unhealthy',
       database: 'error',
@@ -89,7 +89,7 @@ app.get('/api/calls/:clientId', async (req, res) => {
   try {
     const { clientId } = req.params;
     
-    console.log(`📞 Fetching calls for client: ${clientId}`);
+    console.log(`Fetching calls for client: ${clientId}`);
     
     const { data, error } = await supabase
       .from('calls')
@@ -107,7 +107,7 @@ app.get('/api/calls/:clientId', async (req, res) => {
     });
     
   } catch (error) {
-    console.error('❌ Error fetching calls:', error);
+    console.error('Error fetching calls:', error);
     res.status(500).json({ 
       success: false, 
       error: error.message 
@@ -120,7 +120,7 @@ app.get('/api/call/:callId', async (req, res) => {
   try {
     const { callId } = req.params;
     
-    console.log(`📞 Fetching call: ${callId}`);
+    console.log(`Fetching call: ${callId}`);
     
     const { data, error } = await supabase
       .from('calls')
@@ -136,7 +136,7 @@ app.get('/api/call/:callId', async (req, res) => {
     });
     
   } catch (error) {
-    console.error('❌ Error fetching call:', error);
+    console.error('Error fetching call:', error);
     res.status(500).json({ 
       success: false, 
       error: error.message 
@@ -147,7 +147,7 @@ app.get('/api/call/:callId', async (req, res) => {
 // API Routes - Get all clients
 app.get('/api/clients', async (req, res) => {
   try {
-    console.log('🏢 Fetching all clients');
+    console.log('Fetching all clients');
     
     const { data, error } = await supabase
       .from('clients')
@@ -163,7 +163,7 @@ app.get('/api/clients', async (req, res) => {
     });
     
   } catch (error) {
-    console.error('❌ Error fetching clients:', error);
+    console.error('Error fetching clients:', error);
     res.status(500).json({ 
       success: false, 
       error: error.message 
@@ -173,7 +173,7 @@ app.get('/api/clients', async (req, res) => {
 
 // Error handling middleware
 app.use((err, req, res, next) => {
-  console.error('💥 Unhandled error:', err);
+  console.error('Unhandled error:', err);
   res.status(500).json({ 
     success: false, 
     error: 'Internal server error',
@@ -189,17 +189,18 @@ app.use((req, res) => {
   });
 });
 
-// Start server - BIND TO 0.0.0.0 FOR RAILWAY
-app.listen(PORT, '0.0.0.0', () => {
+// CRITICAL: Start server with IPv6 binding for Railway
+// Using '::' instead of '0.0.0.0' to support Railway's networking
+app.listen(PORT, '::', () => {
   console.log('');
-  console.log('🚀 ========================================');
-  console.log('🚀 M1 Voice Dashboard API');
-  console.log('🚀 ========================================');
-  console.log(`🚀 Server running on port ${PORT}`);
-  console.log(`🚀 Environment: ${process.env.NODE_ENV}`);
-  console.log(`📡 Webhook endpoint: http://0.0.0.0:${PORT}/webhook/telnyx`);
-  console.log(`🏥 Health check: http://0.0.0.0:${PORT}/health`);
-  console.log(`🔍 Detailed health: http://0.0.0.0:${PORT}/health/detailed`);
-  console.log('🚀 ========================================');
+  console.log('========================================');
+  console.log('M1 Voice Dashboard API');
+  console.log('========================================');
+  console.log(`Server running on port ${PORT}`);
+  console.log(`Environment: ${process.env.NODE_ENV}`);
+  console.log(`Binding: IPv6 (::) for Railway compatibility`);
+  console.log(`Webhook: http://[::]:${PORT}/webhook/telnyx`);
+  console.log(`Health: http://[::]:${PORT}/health`);
+  console.log('========================================');
   console.log('');
 });
