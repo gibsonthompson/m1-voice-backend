@@ -3,6 +3,9 @@
   "version": "1.0.0",
   "description": "M1 Voice Dashboard Backend API - Receives webhooks from Telnyx AI Assistants",
   "main": "src/index.js",
+  "engines": {
+    "node": "20.x"
+  },
   "scripts": {
     "start": "node src/index.js",
     "dev": "node src/index.js"
