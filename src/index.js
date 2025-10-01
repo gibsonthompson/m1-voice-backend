@@ -1,5 +1,6 @@
 const express = require('express');
 const { handleTelnyxWebhook } = require('./webhooks');
+const { processConversation } = require('./conversations');
 
 const app = express();
 
@@ -17,6 +18,7 @@ app.get('/', (req, res) => {
       health: '/health',
       detailedHealth: '/health/detailed',
       webhook: '/webhook/telnyx',
+      processConversation: '/api/process-conversation/:conversationId',
       calls: '/api/calls/:clientId',
       singleCall: '/api/call/:callId',
       clients: '/api/clients'
@@ -63,7 +65,29 @@ app.get('/health/detailed', async (req, res) => {
 // Telnyx webhook endpoint
 app.post('/webhook/telnyx', handleTelnyxWebhook);
 
-// API endpoints
+// Process conversation endpoint - fetch from Telnyx API and update database
+app.post('/api/process-conversation/:conversationId', async (req, res) => {
+  try {
+    const { conversationId } = req.params;
+    console.log('Processing conversation:', conversationId);
+    
+    const result = await processConversation(conversationId);
+    
+    res.json({ 
+      success: true, 
+      call: result,
+      message: 'Conversation processed and SMS sent'
+    });
+  } catch (error) {
+    console.error('Error processing conversation:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: error.message 
+    });
+  }
+});
+
+// Get all calls for a client
 app.get('/api/calls/:clientId', async (req, res) => {
   try {
     const { createClient } = require('@supabase/supabase-js');
@@ -86,6 +110,7 @@ app.get('/api/calls/:clientId', async (req, res) => {
   }
 });
 
+// Get single call details
 app.get('/api/call/:callId', async (req, res) => {
   try {
     const { createClient } = require('@supabase/supabase-js');
@@ -108,6 +133,7 @@ app.get('/api/call/:callId', async (req, res) => {
   }
 });
 
+// Get all clients
 app.get('/api/clients', async (req, res) => {
   try {
     const { createClient } = require('@supabase/supabase-js');
@@ -140,7 +166,7 @@ app.use((err, req, res, next) => {
   res.status(500).json({ error: 'Internal server error' });
 });
 
-// ✅ THIS IS THE KEY FIX - Read PORT from environment
+// Start server
 const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, '0.0.0.0', () => {
