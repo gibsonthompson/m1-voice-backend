@@ -1,5 +1,4 @@
 const { createClient } = require('@supabase/supabase-js');
-const { sendSMS } = require('./sms');
 const axios = require('axios');
 
 const supabase = createClient(
@@ -19,7 +18,7 @@ async function getPhoneNumberFromVapi(phoneNumberId) {
     );
     return response.data.number;
   } catch (error) {
-    console.error('Error fetching phone number from Vapi:', error.message);
+    console.error('Error fetching phone number:', error.message);
     return null;
   }
 }
@@ -32,41 +31,35 @@ async function handleVapiWebhook(req, res) {
       const call = message.call;
       const phoneNumberId = call.phoneNumberId;
       
-      console.log('Phone Number ID:', phoneNumberId);
-      
       const phoneNumber = await getPhoneNumberFromVapi(phoneNumberId);
-      console.log('Actual phone number:', phoneNumber);
 
       if (!phoneNumber) {
-        console.log('Could not retrieve phone number from Vapi');
         return res.status(200).json({ received: true });
       }
 
-      const { data: client, error: clientError } = await supabase
+      const { data: client } = await supabase
         .from('clients')
         .select('*')
         .eq('phone_number', phoneNumber)
         .single();
 
-      if (clientError || !client) {
-        console.log('Client not found for:', phoneNumber);
-        console.log('Error:', clientError?.message);
+      if (!client) {
+        console.log('No client found');
         return res.status(200).json({ received: true });
       }
 
-      console.log('Client found:', client.business_name);
-
       const transcript = message.transcript || '';
-      const fromNumber = call.customer?.number || call.from || 'unknown';
+      const callerPhone = call.customer?.number || 'unknown';
       
       const callRecord = {
         client_id: client.id,
-        call_id: call.id,
-        from_number: fromNumber,
-        to_number: phoneNumber,
-        duration: call.endedAt ? Math.round((new Date(call.endedAt) - new Date(call.startedAt)) / 1000) : 0,
+        conversation_id: call.id,
+        caller_phone: callerPhone,
+        duration_seconds: call.endedAt ? Math.round((new Date(call.endedAt) - new Date(call.startedAt)) / 1000) : 0,
+        started_at: call.startedAt,
+        ended_at: call.endedAt,
         transcript: transcript,
-        status: 'completed'
+        call_status: 'completed'
       };
 
       const { error: saveError } = await supabase
@@ -74,23 +67,10 @@ async function handleVapiWebhook(req, res) {
         .insert([callRecord]);
 
       if (saveError) {
-        console.error('Error saving call:', saveError.message);
+        console.error('Save error:', saveError.message);
       } else {
-        console.log('Call saved successfully');
-      }
-
-      if (client.owner_phone) {
-        try {
-          await sendSMS(
-            client.owner_phone, 
-            `New call for ${client.business_name}\nFrom: ${fromNumber}\n\n${transcript.substring(0, 150)}`
-          );
-          console.log('SMS sent to:', client.owner_phone);
-        } catch (smsError) {
-          console.error('SMS error:', smsError.message);
-        }
-      } else {
-        console.log('No owner_phone configured for client');
+        console.log('✅ Call saved');
+        console.log('Transcript:', transcript.substring(0, 200));
       }
 
       return res.status(200).json({ received: true });
@@ -99,7 +79,7 @@ async function handleVapiWebhook(req, res) {
     return res.status(200).json({ received: true });
 
   } catch (error) {
-    console.error('Webhook error:', error);
+    console.error('Error:', error);
     return res.status(500).json({ error: error.message });
   }
 }
