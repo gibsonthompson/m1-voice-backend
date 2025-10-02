@@ -71,13 +71,12 @@ async function getPhoneNumberFromVapi(phoneNumberId) {
   }
 }
 
+// REGEX EXTRACTION FUNCTIONS
 function extractCustomerName(transcript) {
   const patterns = [
-    /my name is ([a-z\s]+?)(?:\.|,|$|user:|ai:|email)/i,
-    /this is ([a-z\s]+?)(?:\.|,|$|user:|ai:|email)/i,
-    /i'm ([a-z\s]+?)(?:\.|,|$|user:|ai:|email)/i,
+    /(?:my name is|name is|i'm|i am|this is|call me)\s+([a-z\s]{3,50})(?:\.|,|$|user:|ai:|and|with|\d)/i,
+    /(?:^|\n)user:?\s*([a-z]+\s+[a-z]+)(?:\s|\.|\n)/i,
     /([a-z]+\s+[a-z]+)\s+\d+\s+at\s+gmail/i,
-    /([a-z]+\s+[a-z]+)\s+[\d\s]+/i,
   ];
   
   for (const pattern of patterns) {
@@ -85,7 +84,8 @@ function extractCustomerName(transcript) {
     if (match && match[1]) {
       const name = match[1].trim();
       if (name.length < 3 || name.length > 50) continue;
-      if (['hello', 'thanks', 'thank you', 'sorry'].includes(name.toLowerCase())) continue;
+      const lowerName = name.toLowerCase();
+      if (['hello', 'thanks', 'thank you', 'sorry', 'alright', 'perfect'].includes(lowerName)) continue;
       
       return name.split(' ')
         .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
@@ -96,19 +96,58 @@ function extractCustomerName(transcript) {
   return null;
 }
 
-function extractPhoneNumber(transcript) {
+function extractEmail(transcript) {
   const patterns = [
-    /(\d{3}[-.\s]?\d{3}[-.\s]?\d{4})/,
-    /(\d\s+\d\s+\d\s+\d\s+\d\s+\d\s+\d\s+\d\s+\d\s+\d)/,
+    /([a-z0-9._-]+\s*@\s*[a-z0-9.-]+\.[a-z]{2,})/i,
+    /([a-z0-9._-]+)\s+at\s+([a-z0-9.-]+)\s+dot\s+([a-z]{2,})/i,
   ];
   
   for (const pattern of patterns) {
     const match = transcript.match(pattern);
     if (match) {
-      const cleaned = match[1].replace(/\s+/g, '').replace(/[^\d]/g, '');
+      if (pattern.source.includes('at')) {
+        // Spoken format: "name at domain dot com"
+        return `${match[1].replace(/\s/g, '')}@${match[2].replace(/\s/g, '')}.${match[3]}`;
+      } else {
+        // Standard format
+        return match[1].replace(/\s/g, '');
+      }
+    }
+  }
+  
+  return null;
+}
+
+function extractPhoneNumber(transcript) {
+  const patterns = [
+    /(\d{3}[-.\s]?\d{3}[-.\s]?\d{4})/,
+    /(\d\s+\d\s+\d\s+\d\s+\d\s+\d\s+\d\s+\d\s+\d\s+\d)/,
+    /(\d{3})\D*(\d{3})\D*(\d{4})/,
+  ];
+  
+  for (const pattern of patterns) {
+    const match = transcript.match(pattern);
+    if (match) {
+      const cleaned = match[0].replace(/\s+/g, '').replace(/[^\d]/g, '');
       if (cleaned.length === 10) {
         return `+1${cleaned}`;
       }
+    }
+  }
+  
+  return null;
+}
+
+function extractAddress(transcript) {
+  const patterns = [
+    /(\d+\s+[a-z0-9\s]+(?:street|st|avenue|ave|road|rd|lane|ln|drive|dr|court|ct|circle|cir|way))/i,
+    /address\s+is\s+([^\n.]+)/i,
+  ];
+  
+  for (const pattern of patterns) {
+    const match = transcript.match(pattern);
+    if (match && match[1]) {
+      return match[1].trim();
     }
   }
   
@@ -169,6 +208,58 @@ function extractAppointmentInfo(transcript) {
     booked: true,
     time: appointmentTime
   };
+}
+
+// AI EXTRACTION FALLBACK
+async function extractWithAI(transcript) {
+  try {
+    const response = await axios.post(
+      'https://api.openai.com/v1/chat/completions',
+      {
+        model: 'gpt-4o-mini',
+        messages: [
+          {
+            role: 'system',
+            content: 'You are a data extraction assistant. Extract information from call transcripts and return ONLY valid JSON. If a field cannot be found, use null.'
+          },
+          {
+            role: 'user',
+            content: `Extract the following information from this call transcript and return ONLY a JSON object:
+
+{
+  "customer_name": "full name of the caller",
+  "customer_email": "email address",
+  "customer_phone": "phone number in format +1XXXXXXXXXX",
+  "customer_address": "street address if mentioned"
+}
+
+Transcript:
+${transcript}
+
+Remember: Return ONLY the JSON object, no other text.`
+          }
+        ],
+        temperature: 0.1,
+        max_tokens: 200
+      },
+      {
+        headers: {
+          'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
+          'Content-Type': 'application/json'
+        }
+      }
+    );
+
+    const aiResponse = response.data.choices[0].message.content.trim();
+    // Remove markdown code blocks if present
+    const jsonString = aiResponse.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+    const extracted = JSON.parse(jsonString);
+    
+    return extracted;
+  } catch (error) {
+    console.error('AI extraction error:', error.message);
+    return null;
+  }
 }
 
 async function getOrCreateGHLContact(phone, name) {
@@ -262,8 +353,29 @@ async function handleVapiWebhook(req, res) {
       const transcript = message.transcript || '';
       const callerPhone = call.customer?.number || 'unknown';
       
-      const customerName = extractCustomerName(transcript);
-      const customerPhone = extractPhoneNumber(transcript) || callerPhone;
+      // STEP 1: Try regex extraction first
+      let customerName = extractCustomerName(transcript);
+      let customerEmail = extractEmail(transcript);
+      let customerPhone = extractPhoneNumber(transcript) || callerPhone;
+      let customerAddress = extractAddress(transcript);
+      let extractionMethod = 'regex';
+      
+      // STEP 2: If critical fields are missing, use AI fallback
+      if (!customerName || !customerPhone || !customerEmail) {
+        console.log('⚠️ Regex extraction incomplete, trying AI...');
+        const aiExtracted = await extractWithAI(transcript);
+        
+        if (aiExtracted) {
+          customerName = customerName || aiExtracted.customer_name;
+          customerEmail = customerEmail || aiExtracted.customer_email;
+          customerPhone = customerPhone || aiExtracted.customer_phone;
+          customerAddress = customerAddress || aiExtracted.customer_address;
+          extractionMethod = 'ai';
+          console.log('✅ AI extraction completed');
+        }
+      }
+      
+      // STEP 3: Extract service, urgency, and appointment (regex only)
       const serviceRequested = extractServiceRequested(transcript, client.industry || 'general');
       const urgencyLevel = extractUrgencyLevel(transcript);
       const appointmentInfo = extractAppointmentInfo(transcript);
@@ -282,11 +394,14 @@ async function handleVapiWebhook(req, res) {
         transcript: transcript,
         call_status: 'completed',
         customer_name: customerName,
+        customer_email: customerEmail,
         customer_phone: customerPhone,
+        customer_address: customerAddress,
         service_requested: serviceRequested,
         urgency_level: urgencyLevel,
         appointment_booked: appointmentInfo.booked,
-        appointment_time: appointmentInfo.time ? String(appointmentInfo.time) : null
+        appointment_time: appointmentInfo.time ? String(appointmentInfo.time) : null,
+        extraction_method: extractionMethod
       };
 
       const { error: insertError } = await supabase.from('calls').insert([callRecord]);
@@ -299,7 +414,9 @@ async function handleVapiWebhook(req, res) {
       console.log('✅ Call saved:', {
         client: client.business_name,
         industry: client.industry,
+        extraction: extractionMethod,
         name: customerName,
+        email: customerEmail,
         service: serviceRequested,
         urgency: urgencyLevel
       });
@@ -315,6 +432,7 @@ async function handleVapiWebhook(req, res) {
           const smsMessage = `${urgencyFlag}New call for ${client.business_name}\n\n` +
             `Caller: ${customerName || 'Unknown'}\n` +
             `Phone: ${customerPhone}\n` +
+            (customerEmail ? `Email: ${customerEmail}\n` : '') +
             `Service: ${serviceRequested || 'Not specified'}\n` +
             `Duration: ${duration}s\n` +
             (appointmentInfo.booked ? `Appointment: ${appointmentInfo.time}\n` : '') +
