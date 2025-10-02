@@ -23,15 +23,55 @@ async function getPhoneNumberFromVapi(phoneNumberId) {
   }
 }
 
-async function sendGHLSMS(toPhone, message) {
+async function getOrCreateGHLContact(phone, name) {
   try {
-    const response = await axios.post(
+    // Search for contact by phone
+    const searchResponse = await axios.get(
+      `https://services.leadconnectorhq.com/contacts/search/duplicate?locationId=${process.env.GHL_LOCATION_ID}&phone=${encodeURIComponent(phone)}`,
+      {
+        headers: {
+          'Authorization': `Bearer ${process.env.GHL_API_KEY}`,
+          'Version': '2021-07-28'
+        }
+      }
+    );
+
+    if (searchResponse.data.contact) {
+      return searchResponse.data.contact.id;
+    }
+
+    // Contact doesn't exist, create it
+    const createResponse = await axios.post(
+      'https://services.leadconnectorhq.com/contacts/',
+      {
+        locationId: process.env.GHL_LOCATION_ID,
+        phone: phone,
+        name: name || 'Business Owner'
+      },
+      {
+        headers: {
+          'Authorization': `Bearer ${process.env.GHL_API_KEY}`,
+          'Content-Type': 'application/json',
+          'Version': '2021-07-28'
+        }
+      }
+    );
+
+    return createResponse.data.contact.id;
+  } catch (error) {
+    console.error('GHL contact error:', error.response?.data || error.message);
+    return null;
+  }
+}
+
+async function sendGHLSMS(contactId, message) {
+  try {
+    await axios.post(
       'https://services.leadconnectorhq.com/conversations/messages',
       {
         type: 'SMS',
-        contactId: toPhone, // GHL will create contact if doesn't exist
-        message: message,
-        locationId: process.env.GHL_LOCATION_ID
+        contactId: contactId,
+        message: message
       },
       {
         headers: {
@@ -90,14 +130,17 @@ async function handleVapiWebhook(req, res) {
       await supabase.from('calls').insert([callRecord]);
       console.log('✅ Call saved');
 
-      // Send SMS via GoHighLevel
       if (client.owner_phone) {
-        const smsMessage = `New call for ${client.business_name}\n\nFrom: ${callerPhone}\nDuration: ${callRecord.duration_seconds}s\n\nTranscript: ${transcript.substring(0, 150)}...`;
+        const contactId = await getOrCreateGHLContact(client.owner_phone, client.owner_name || client.business_name);
         
-        const smsSent = await sendGHLSMS(client.owner_phone, smsMessage);
-        
-        if (smsSent) {
-          console.log('✅ SMS sent via GHL to:', client.owner_phone);
+        if (contactId) {
+          const smsMessage = `New call for ${client.business_name}\n\nFrom: ${callerPhone}\nDuration: ${callRecord.duration_seconds}s\n\nTranscript: ${transcript.substring(0, 150)}...`;
+          
+          const smsSent = await sendGHLSMS(contactId, smsMessage);
+          
+          if (smsSent) {
+            console.log('✅ SMS sent via GHL');
+          }
         }
       }
 
