@@ -1,6 +1,6 @@
 const express = require('express');
-const { handleTelnyxWebhook } = require('./webhooks');
-const { processConversation } = require('./conversations');
+const { createClient } = require('@supabase/supabase-js');
+const { handleVapiWebhook } = require('./webhooks');
 
 const app = express();
 
@@ -8,7 +8,13 @@ const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Basic routes
+// Supabase client
+const supabase = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_KEY
+);
+
+// Root route
 app.get('/', (req, res) => {
   res.json({
     name: 'M1 Voice AI Backend',
@@ -17,8 +23,7 @@ app.get('/', (req, res) => {
     endpoints: {
       health: '/health',
       detailedHealth: '/health/detailed',
-      webhook: '/webhook/telnyx',
-      processConversation: '/api/process-conversation/:conversationId',
+      vapiWebhook: '/webhook/vapi',
       calls: '/api/calls/:clientId',
       singleCall: '/api/call/:callId',
       clients: '/api/clients'
@@ -26,19 +31,17 @@ app.get('/', (req, res) => {
   });
 });
 
+// Health check
 app.get('/health', (req, res) => {
-  res.json({ status: 'healthy', timestamp: new Date().toISOString() });
+  res.json({ 
+    status: 'healthy', 
+    timestamp: new Date().toISOString() 
+  });
 });
 
+// Detailed health check with database
 app.get('/health/detailed', async (req, res) => {
   try {
-    const { createClient } = require('@supabase/supabase-js');
-    const supabase = createClient(
-      process.env.SUPABASE_URL,
-      process.env.SUPABASE_KEY
-    );
-    
-    // Test database connection
     const { data, error } = await supabase
       .from('clients')
       .select('count')
@@ -62,40 +65,12 @@ app.get('/health/detailed', async (req, res) => {
   }
 });
 
-// Telnyx webhook endpoint
-app.post('/webhook/telnyx', handleTelnyxWebhook);
-
-// Process conversation endpoint - fetch from Telnyx API and update database
-app.post('/api/process-conversation/:conversationId', async (req, res) => {
-  try {
-    const { conversationId } = req.params;
-    console.log('Processing conversation:', conversationId);
-    
-    const result = await processConversation(conversationId);
-    
-    res.json({ 
-      success: true, 
-      call: result,
-      message: 'Conversation processed and SMS sent'
-    });
-  } catch (error) {
-    console.error('Error processing conversation:', error);
-    res.status(500).json({ 
-      success: false, 
-      error: error.message 
-    });
-  }
-});
+// Vapi webhook endpoint
+app.post('/webhook/vapi', handleVapiWebhook);
 
 // Get all calls for a client
 app.get('/api/calls/:clientId', async (req, res) => {
   try {
-    const { createClient } = require('@supabase/supabase-js');
-    const supabase = createClient(
-      process.env.SUPABASE_URL,
-      process.env.SUPABASE_KEY
-    );
-    
     const { data, error } = await supabase
       .from('calls')
       .select('*')
@@ -113,12 +88,6 @@ app.get('/api/calls/:clientId', async (req, res) => {
 // Get single call details
 app.get('/api/call/:callId', async (req, res) => {
   try {
-    const { createClient } = require('@supabase/supabase-js');
-    const supabase = createClient(
-      process.env.SUPABASE_URL,
-      process.env.SUPABASE_KEY
-    );
-    
     const { data, error } = await supabase
       .from('calls')
       .select('*')
@@ -136,12 +105,6 @@ app.get('/api/call/:callId', async (req, res) => {
 // Get all clients
 app.get('/api/clients', async (req, res) => {
   try {
-    const { createClient } = require('@supabase/supabase-js');
-    const supabase = createClient(
-      process.env.SUPABASE_URL,
-      process.env.SUPABASE_KEY
-    );
-    
     const { data, error } = await supabase
       .from('clients')
       .select('*')
@@ -167,7 +130,7 @@ app.use((err, req, res, next) => {
 });
 
 // Start server
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 8080;
 
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`✅ M1 Voice Backend running on port ${PORT}`);
