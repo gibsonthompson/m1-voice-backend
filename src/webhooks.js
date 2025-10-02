@@ -72,24 +72,21 @@ async function getPhoneNumberFromVapi(phoneNumberId) {
 }
 
 function extractCustomerName(transcript) {
-  // Look for common name patterns
   const patterns = [
     /my name is ([a-z\s]+?)(?:\.|,|$|user:|ai:|email)/i,
     /this is ([a-z\s]+?)(?:\.|,|$|user:|ai:|email)/i,
     /i'm ([a-z\s]+?)(?:\.|,|$|user:|ai:|email)/i,
-    /([a-z]+\s+[a-z]+)\s+\d+\s+at\s+gmail/i, // Name before email
-    /([a-z]+\s+[a-z]+)\s+[\d\s]+/i, // Name before phone digits
+    /([a-z]+\s+[a-z]+)\s+\d+\s+at\s+gmail/i,
+    /([a-z]+\s+[a-z]+)\s+[\d\s]+/i,
   ];
   
   for (const pattern of patterns) {
     const match = transcript.match(pattern);
     if (match && match[1]) {
       const name = match[1].trim();
-      // Filter out common false positives
       if (name.length < 3 || name.length > 50) continue;
       if (['hello', 'thanks', 'thank you', 'sorry'].includes(name.toLowerCase())) continue;
       
-      // Capitalize properly
       return name.split(' ')
         .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
         .join(' ');
@@ -100,16 +97,14 @@ function extractCustomerName(transcript) {
 }
 
 function extractPhoneNumber(transcript) {
-  // Look for phone patterns
   const patterns = [
-    /(\d{3}[-.\s]?\d{3}[-.\s]?\d{4})/,  // Standard format
-    /(\d\s+\d\s+\d\s+\d\s+\d\s+\d\s+\d\s+\d\s+\d\s+\d)/,  // Digit by digit
+    /(\d{3}[-.\s]?\d{3}[-.\s]?\d{4})/,
+    /(\d\s+\d\s+\d\s+\d\s+\d\s+\d\s+\d\s+\d\s+\d\s+\d)/,
   ];
   
   for (const pattern of patterns) {
     const match = transcript.match(pattern);
     if (match) {
-      // Clean up: remove spaces and non-digits
       const cleaned = match[1].replace(/\s+/g, '').replace(/[^\d]/g, '');
       if (cleaned.length === 10) {
         return `+1${cleaned}`;
@@ -131,7 +126,6 @@ function extractServiceRequested(transcript, industry) {
     }
   }
   
-  // Return up to 2 most relevant services
   return services.slice(0, 2).join(', ') || null;
 }
 
@@ -149,7 +143,6 @@ function extractUrgencyLevel(transcript) {
 function extractAppointmentInfo(transcript) {
   const text = transcript.toLowerCase();
   
-  // Check if appointment was discussed
   const appointmentKeywords = ['appointment', 'schedule', 'book'];
   const hasAppointment = appointmentKeywords.some(keyword => text.includes(keyword));
   
@@ -157,7 +150,6 @@ function extractAppointmentInfo(transcript) {
     return { booked: false, time: null };
   }
   
-  // Try to extract time/date information
   const timePatterns = [
     /(monday|tuesday|wednesday|thursday|friday|saturday|sunday)[,\s]+[^.\n]+/i,
     /(tomorrow|today|next week)[,\s]+[^.\n]+/i,
@@ -270,14 +262,12 @@ async function handleVapiWebhook(req, res) {
       const transcript = message.transcript || '';
       const callerPhone = call.customer?.number || 'unknown';
       
-      // Extract all information using industry-specific keywords
       const customerName = extractCustomerName(transcript);
       const customerPhone = extractPhoneNumber(transcript) || callerPhone;
       const serviceRequested = extractServiceRequested(transcript, client.industry || 'general');
       const urgencyLevel = extractUrgencyLevel(transcript);
       const appointmentInfo = extractAppointmentInfo(transcript);
       
-      // Calculate duration
       const duration = call.endedAt && call.startedAt 
         ? Math.round((new Date(call.endedAt) - new Date(call.startedAt)) / 1000) 
         : 0;
@@ -296,7 +286,7 @@ async function handleVapiWebhook(req, res) {
         service_requested: serviceRequested,
         urgency_level: urgencyLevel,
         appointment_booked: appointmentInfo.booked,
-        appointment_time: appointmentInfo.time
+        appointment_time: appointmentInfo.time ? String(appointmentInfo.time) : null
       };
 
       const { error: insertError } = await supabase.from('calls').insert([callRecord]);
@@ -314,7 +304,6 @@ async function handleVapiWebhook(req, res) {
         urgency: urgencyLevel
       });
 
-      // Send SMS notification to business owner
       if (client.owner_phone) {
         const contactId = await getOrCreateGHLContact(
           client.owner_phone, 
