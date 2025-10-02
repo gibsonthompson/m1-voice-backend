@@ -85,10 +85,56 @@ app.get('/api/calls/:clientId', async (req, res) => {
   }
 });
 
-// Get single call details - FIXED LINE 95
+// Get single call details - FIXED: changed 'call_id' to 'id'
 app.get('/api/call/:callId', async (req, res) => {
   try {
     const { data, error } = await supabase
       .from('calls')
       .select('*')
-      .eq('i
+      .eq('id', req.params.callId)
+      .single();
+    
+    if (error) throw error;
+    
+    res.json({ success: true, call: data });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Get all clients
+app.get('/api/clients', async (req, res) => {
+  try {
+    const { data, error } = await supabase
+      .from('clients')
+      .select('*')
+      .order('created_at', { ascending: false });
+    
+    if (error) throw error;
+    
+    res.json({ success: true, clients: data });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// 404 handler
+app.use((req, res) => {
+  res.status(404).json({ error: 'Not found' });
+});
+
+// Error handler
+app.use((err, req, res, next) => {
+  console.error('Error:', err);
+  res.status(500).json({ error: 'Internal server error' });
+});
+
+// Start server
+const PORT = process.env.PORT || 8080;
+
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`✅ M1 Voice Backend running on port ${PORT}`);
+  console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
+  console.log(`Supabase URL: ${process.env.SUPABASE_URL ? 'Configured' : 'Missing'}`);
+  console.log(`Telnyx API Key: ${process.env.TELNYX_API_KEY ? 'Configured' : 'Missing'}`);
+});
