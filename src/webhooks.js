@@ -23,9 +23,107 @@ async function getPhoneNumberFromVapi(phoneNumberId) {
   }
 }
 
+// NEW: Extract customer name from transcript
+function extractCustomerName(transcript) {
+  const text = transcript.toLowerCase();
+  
+  // Look for common name patterns
+  const patterns = [
+    /my name is ([a-z\s]+?)(?:\.|,|$|user:|ai:)/i,
+    /this is ([a-z\s]+?)(?:\.|,|$|user:|ai:)/i,
+    /i'm ([a-z\s]+?)(?:\.|,|$|user:|ai:)/i,
+    /([a-z]+\s+[a-z]+)\s+\d+\s+at\s+gmail/i, // Name before email
+  ];
+  
+  for (const pattern of patterns) {
+    const match = transcript.match(pattern);
+    if (match && match[1]) {
+      const name = match[1].trim();
+      // Capitalize first letter of each word
+      return name.split(' ')
+        .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+        .join(' ');
+    }
+  }
+  
+  return null;
+}
+
+// NEW: Extract phone number from transcript
+function extractPhoneNumber(transcript) {
+  // Look for phone patterns (including spoken digit by digit)
+  const patterns = [
+    /(\d{3}[-.\s]?\d{3}[-.\s]?\d{4})/,  // Standard format
+    /(\d\s+\d\s+\d\s+\d\s+\d\s+\d\s+\d\s+\d\s+\d\s+\d)/,  // Digit by digit
+  ];
+  
+  for (const pattern of patterns) {
+    const match = transcript.match(pattern);
+    if (match) {
+      // Clean up the number
+      return match[1].replace(/\s+/g, '').replace(/[^\d]/g, '');
+    }
+  }
+  
+  return null;
+}
+
+// NEW: Extract service requested from transcript
+function extractServiceRequested(transcript) {
+  const text = transcript.toLowerCase();
+  
+  // Service keywords
+  const serviceKeywords = {
+    'Plumbing': ['plumb', 'pipe', 'leak', 'drain', 'water', 'faucet', 'toilet', 'sink'],
+    'Electrical': ['electric', 'outlet', 'wire', 'power', 'breaker', 'light'],
+    'HVAC': ['hvac', 'ac', 'air condition', 'heat', 'furnace', 'cooling', 'heating'],
+    'General Repair': ['repair', 'fix', 'broken', 'maintenance'],
+    'Emergency Service': ['emergency', 'urgent', 'asap', 'flooding'],
+    'Estimate/Consultation': ['estimate', 'quote', 'consultation', 'appointment', 'schedule']
+  };
+  
+  const services = [];
+  for (const [service, keywords] of Object.entries(serviceKeywords)) {
+    if (keywords.some(keyword => text.includes(keyword))) {
+      services.push(service);
+    }
+  }
+  
+  return services.length > 0 ? services.join(', ') : null;
+}
+
+// NEW: Determine urgency level
+function extractUrgencyLevel(transcript) {
+  const text = transcript.toLowerCase();
+  const urgentKeywords = ['emergency', 'urgent', 'asap', 'immediately', 'flooding', 'burst', 'leak'];
+  
+  return urgentKeywords.some(keyword => text.includes(keyword)) ? 'high' : 'normal';
+}
+
+// NEW: Extract appointment information
+function extractAppointmentInfo(transcript) {
+  const text = transcript.toLowerCase();
+  
+  // Check if appointment was discussed
+  const appointmentKeywords = ['appointment', 'schedule', 'book', 'friday', 'monday', 'tuesday'];
+  const hasAppointment = appointmentKeywords.some(keyword => text.includes(keyword));
+  
+  if (!hasAppointment) {
+    return { booked: false, time: null };
+  }
+  
+  // Try to extract time/date
+  const timePattern = /(monday|tuesday|wednesday|thursday|friday|saturday|sunday)[,\s]+([^.]+)/i;
+  const match = transcript.match(timePattern);
+  
+  return {
+    booked: true,
+    time: match ? match[0].trim() : null
+  };
+}
+
 async function getOrCreateGHLContact(phone, name) {
   try {
-    // Search for contact by phone
     const searchResponse = await axios.get(
       `https://services.leadconnectorhq.com/contacts/search/duplicate?locationId=${process.env.GHL_LOCATION_ID}&number=${encodeURIComponent(phone)}`,
       {
@@ -40,12 +138,11 @@ async function getOrCreateGHLContact(phone, name) {
       return searchResponse.data.contact.id;
     }
 
-    // Contact doesn't exist, create it
     const createResponse = await axios.post(
       'https://services.leadconnectorhq.com/contacts/',
       {
         locationId: process.env.GHL_LOCATION_ID,
-        phoneNumber: phone,  // Changed from 'phone' to 'phoneNumber'
+        phoneNumber: phone,
         name: name || 'Business Owner'
       },
       {
@@ -116,25 +213,49 @@ async function handleVapiWebhook(req, res) {
       const transcript = message.transcript || '';
       const callerPhone = call.customer?.number || 'unknown';
       
+      // ENHANCED: Extract all information from transcript
+      const customerName = extractCustomerName(transcript);
+      const customerPhone = extractPhoneNumber(transcript) || callerPhone;
+      const serviceRequested = extractServiceRequested(transcript);
+      const urgencyLevel = extractUrgencyLevel(transcript);
+      const appointmentInfo = extractAppointmentInfo(transcript);
+      
+      // Calculate duration
+      const duration = call.endedAt && call.startedAt 
+        ? Math.round((new Date(call.endedAt) - new Date(call.startedAt)) / 1000) 
+        : 0;
+      
       const callRecord = {
         client_id: client.id,
         conversation_id: call.id,
         caller_phone: callerPhone,
-        duration_seconds: call.endedAt ? Math.round((new Date(call.endedAt) - new Date(call.startedAt)) / 1000) : 0,
-        started_at: call.startedAt,
-        ended_at: call.endedAt,
+        duration_seconds: duration,
+        started_at: call.startedAt || new Date().toISOString(),
+        ended_at: call.endedAt || new Date().toISOString(),
         transcript: transcript,
-        call_status: 'completed'
+        call_status: 'completed',
+        // NEW: Add extracted fields
+        customer_name: customerName,
+        customer_phone: customerPhone,
+        service_requested: serviceRequested,
+        urgency_level: urgencyLevel,
+        appointment_booked: appointmentInfo.booked,
+        appointment_time: appointmentInfo.time
       };
 
       await supabase.from('calls').insert([callRecord]);
-      console.log('✅ Call saved');
+      console.log('✅ Call saved with extracted data:', {
+        name: customerName,
+        service: serviceRequested,
+        urgency: urgencyLevel
+      });
 
       if (client.owner_phone) {
         const contactId = await getOrCreateGHLContact(client.owner_phone, client.owner_name || client.business_name);
         
         if (contactId) {
-          const smsMessage = `New call for ${client.business_name}\n\nFrom: ${callerPhone}\nDuration: ${callRecord.duration_seconds}s\n\nTranscript: ${transcript.substring(0, 150)}...`;
+          // Enhanced SMS message with extracted data
+          const smsMessage = `New ${urgencyLevel === 'high' ? '🚨 URGENT' : ''} call for ${client.business_name}\n\nCaller: ${customerName || 'Unknown'}\nPhone: ${customerPhone}\nService: ${serviceRequested || 'Not specified'}\nDuration: ${duration}s\n${appointmentInfo.booked ? `Appointment: ${appointmentInfo.time}\n` : ''}\nTranscript: ${transcript.substring(0, 150)}...`;
           
           const smsSent = await sendGHLSMS(contactId, smsMessage);
           
