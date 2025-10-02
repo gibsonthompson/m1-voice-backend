@@ -23,6 +23,31 @@ async function getPhoneNumberFromVapi(phoneNumberId) {
   }
 }
 
+async function sendGHLSMS(toPhone, message) {
+  try {
+    const response = await axios.post(
+      'https://services.leadconnectorhq.com/conversations/messages',
+      {
+        type: 'SMS',
+        contactId: toPhone, // GHL will create contact if doesn't exist
+        message: message,
+        locationId: process.env.GHL_LOCATION_ID
+      },
+      {
+        headers: {
+          'Authorization': `Bearer ${process.env.GHL_API_KEY}`,
+          'Content-Type': 'application/json',
+          'Version': '2021-07-28'
+        }
+      }
+    );
+    return true;
+  } catch (error) {
+    console.error('GHL SMS error:', error.response?.data || error.message);
+    return false;
+  }
+}
+
 async function handleVapiWebhook(req, res) {
   try {
     const message = req.body.message;
@@ -62,15 +87,18 @@ async function handleVapiWebhook(req, res) {
         call_status: 'completed'
       };
 
-      const { error: saveError } = await supabase
-        .from('calls')
-        .insert([callRecord]);
+      await supabase.from('calls').insert([callRecord]);
+      console.log('✅ Call saved');
 
-      if (saveError) {
-        console.error('Save error:', saveError.message);
-      } else {
-        console.log('✅ Call saved');
-        console.log('Transcript:', transcript.substring(0, 200));
+      // Send SMS via GoHighLevel
+      if (client.owner_phone) {
+        const smsMessage = `New call for ${client.business_name}\n\nFrom: ${callerPhone}\nDuration: ${callRecord.duration_seconds}s\n\nTranscript: ${transcript.substring(0, 150)}...`;
+        
+        const smsSent = await sendGHLSMS(client.owner_phone, smsMessage);
+        
+        if (smsSent) {
+          console.log('✅ SMS sent via GHL to:', client.owner_phone);
+        }
       }
 
       return res.status(200).json({ received: true });
