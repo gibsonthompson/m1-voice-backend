@@ -19,7 +19,7 @@ async function getPhoneNumberFromVapi(phoneNumberId) {
     );
     return response.data.number;
   } catch (error) {
-    console.error('Error fetching phone number:', error.message);
+    console.error('Error fetching phone number from Vapi:', error.message);
     return null;
   }
 }
@@ -30,50 +30,67 @@ async function handleVapiWebhook(req, res) {
     
     if (message?.type === 'end-of-call-report') {
       const call = message.call;
-      
       const phoneNumberId = call.phoneNumberId;
+      
       console.log('Phone Number ID:', phoneNumberId);
       
-      // Fetch actual phone number from Vapi
       const phoneNumber = await getPhoneNumberFromVapi(phoneNumberId);
       console.log('Actual phone number:', phoneNumber);
 
       if (!phoneNumber) {
-        console.log('Could not get phone number from Vapi');
+        console.log('Could not retrieve phone number from Vapi');
         return res.status(200).json({ received: true });
       }
 
-      const { data: client } = await supabase
+      const { data: client, error: clientError } = await supabase
         .from('clients')
         .select('*')
         .eq('phone_number', phoneNumber)
         .single();
 
-      if (!client) {
+      if (clientError || !client) {
         console.log('Client not found for:', phoneNumber);
+        console.log('Error:', clientError?.message);
         return res.status(200).json({ received: true });
       }
 
+      console.log('Client found:', client.business_name);
+
       const transcript = message.transcript || '';
+      const fromNumber = call.customer?.number || call.from || 'unknown';
       
       const callRecord = {
         client_id: client.id,
         call_id: call.id,
-        from_number: call.customer?.number || 'unknown',
+        from_number: fromNumber,
         to_number: phoneNumber,
         duration: call.endedAt ? Math.round((new Date(call.endedAt) - new Date(call.startedAt)) / 1000) : 0,
         transcript: transcript,
         status: 'completed'
       };
 
-      await supabase.from('calls').insert([callRecord]);
-      console.log('Call saved');
+      const { error: saveError } = await supabase
+        .from('calls')
+        .insert([callRecord]);
 
-      if (client.notification_phone) {
-        await sendSMS(client.notification_phone, 
-          `New call for ${client.business_name}\nFrom: ${callRecord.from_number}\n\n${transcript.substring(0, 150)}`
-        );
-        console.log('SMS sent');
+      if (saveError) {
+        console.error('Error saving call:', saveError.message);
+      } else {
+        console.log('Call saved successfully');
+      }
+
+      if (client.owner_phone) {
+        try {
+          await sendSMS(
+            client.owner_phone, 
+            `New call for ${client.business_name}\nFrom: ${fromNumber}\n\n${transcript.substring(0, 150)}`
+          );
+          console.log('SMS sent to:', client.owner_phone);
+        } catch (smsError) {
+          console.error('SMS error:', smsError.message);
+        }
+      } else {
+        console.log('No owner_phone configured for client');
       }
 
       return res.status(200).json({ received: true });
