@@ -27,7 +27,7 @@ async function getOrCreateGHLContact(phone, name) {
   try {
     // Search for contact by phone
     const searchResponse = await axios.get(
-      `https://services.leadconnectorhq.com/contacts/search/duplicate?locationId=${process.env.GHL_LOCATION_ID}&phone=${encodeURIComponent(phone)}`,
+      `https://services.leadconnectorhq.com/contacts/search/duplicate?locationId=${process.env.GHL_LOCATION_ID}&number=${encodeURIComponent(phone)}`,
       {
         headers: {
           'Authorization': `Bearer ${process.env.GHL_API_KEY}`,
@@ -45,7 +45,7 @@ async function getOrCreateGHLContact(phone, name) {
       'https://services.leadconnectorhq.com/contacts/',
       {
         locationId: process.env.GHL_LOCATION_ID,
-        phone: phone,
+        phoneNumber: phone,  // Changed from 'phone' to 'phoneNumber'
         name: name || 'Business Owner'
       },
       {
