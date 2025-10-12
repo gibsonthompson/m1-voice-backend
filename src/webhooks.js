@@ -24,6 +24,13 @@ async function getPhoneNumberFromVapi(phoneNumberId) {
 }
 
 function extractCustomerName(transcript) {
+  // Try to extract from AI summary first
+  const summaryMatch = transcript.match(/name[,:]?\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)/i);
+  if (summaryMatch && summaryMatch[1]) {
+    return summaryMatch[1].trim();
+  }
+
+  // Fallback to original patterns
   const patterns = [
     /my name is ([a-z\s]+?)(?:\.|,|$|user:|ai:|email)/i,
     /this is ([a-z\s]+?)(?:\.|,|$|user:|ai:|email)/i,
@@ -47,27 +54,67 @@ function extractCustomerName(transcript) {
 }
 
 function extractPhoneNumber(transcript) {
-  const patterns = [
-    /(\d{3}[-.\s]?\d{3}[-.\s]?\d{4})/,
-    /(\d\s+\d\s+\d\s+\d\s+\d\s+\d\s+\d\s+\d\s+\d\s+\d)/,
-  ];
-  
-  for (const pattern of patterns) {
-    const match = transcript.match(pattern);
-    if (match) {
-      const cleaned = match[1].replace(/\s+/g, '').replace(/[^\d]/g, '');
-      if (cleaned.length === 10) {
-        return `+1${cleaned}`;
-      }
+  // Try to extract from AI confirmation first (most reliable)
+  const confirmMatch = transcript.match(/(?:phone[,:]?|that is)\s+((?:\d[\s.]*){10,11})/i);
+  if (confirmMatch) {
+    const cleaned = confirmMatch[1].replace(/[\s.\-()]/g, '');
+    if (cleaned.length === 10) {
+      return `+1${cleaned}`;
+    }
+    if (cleaned.length === 11 && cleaned[0] === '1') {
+      return `+${cleaned}`;
+    }
+  }
+
+  // Try standard format
+  const standardMatch = transcript.match(/(\d{3}[-.\s]?\d{3}[-.\s]?\d{4})/);
+  if (standardMatch) {
+    const cleaned = standardMatch[1].replace(/[\s.\-]/g, '');
+    if (cleaned.length === 10) {
+      return `+1${cleaned}`;
+    }
+  }
+
+  // Try digit by digit (must be exactly 10 digits with spaces)
+  const digitMatch = transcript.match(/(\d\s+\d\s+\d\s+\d\s+\d\s+\d\s+\d\s+\d\s+\d\s+\d)(?!\s*\d)/);
+  if (digitMatch) {
+    const cleaned = digitMatch[1].replace(/\s+/g, '');
+    if (cleaned.length === 10) {
+      return `+1${cleaned}`;
     }
   }
   
   return 'Unknown';
 }
 
-function generateAISummary(transcript) {
+function generateSmartSummary(transcript) {
   if (!transcript) return 'Call completed - no transcript available';
   
+  // Try to find the AI's summary section
+  const summaryMatch = transcript.match(/Here's a summary of your information[,:]?(.*?)(?:Our scheduling team|Is there anything else|User:|$)/is);
+  
+  if (summaryMatch && summaryMatch[1]) {
+    // Extract key info from AI's summary
+    const summaryText = summaryMatch[1].trim();
+    
+    const name = summaryText.match(/name[,:]?\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)/i)?.[1];
+    const phone = summaryText.match(/phone[,:]?\s+([\d\s.]+)/i)?.[1]?.replace(/\s+/g, '-');
+    const service = summaryText.match(/service needed[,:]?\s+([^.]+)/i)?.[1]?.trim();
+    const timing = summaryText.match(/(?:preferred timing|appointment)[,:]?\s+([^.]+)/i)?.[1]?.trim();
+    
+    let summary = '';
+    if (name) summary += `${name} `;
+    summary += 'called to schedule ';
+    if (service) summary += `${service} `;
+    if (timing) summary += `for ${timing}. `;
+    if (phone) summary += `Phone: ${phone}.`;
+    
+    if (summary.length > 20) {
+      return summary.trim();
+    }
+  }
+  
+  // Fallback: take first meaningful sentence
   const cleaned = transcript.trim();
   const firstSentence = cleaned.split(/[.!?]/).filter(s => s.trim().length > 10)[0];
   
@@ -115,9 +162,8 @@ async function handleVapiWebhook(req, res) {
       
       const customerName = extractCustomerName(transcript);
       const customerPhone = extractPhoneNumber(transcript) || callerPhone;
-      const aiSummary = generateAISummary(transcript);
+      const aiSummary = generateSmartSummary(transcript);
       
-      // ONLY these fields - nothing else!
       const callRecord = {
         client_id: client.id,
         customer_name: customerName,
