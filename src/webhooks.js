@@ -23,6 +23,89 @@ async function getPhoneNumberFromVapi(phoneNumberId) {
   }
 }
 
+// Create or find contact in GoHighLevel
+async function getOrCreateGHLContact(phone, name, businessName) {
+  try {
+    console.log('🔍 Looking for GHL contact:', phone);
+    
+    // Search for existing contact
+    const searchResponse = await axios.get(
+      'https://services.leadconnectorhq.com/contacts/search',
+      {
+        params: {
+          locationId: process.env.GHL_LOCATION_ID,
+          query: phone.replace(/\D/g, '') // Search by digits only
+        },
+        headers: {
+          'Authorization': `Bearer ${process.env.GHL_API_KEY}`,
+          'Version': '2021-07-28'
+        }
+      }
+    );
+
+    if (searchResponse.data.contacts && searchResponse.data.contacts.length > 0) {
+      console.log('✅ Found existing contact');
+      return searchResponse.data.contacts[0].id;
+    }
+
+    // Create new contact if not found
+    console.log('📝 Creating new GHL contact');
+    const createResponse = await axios.post(
+      'https://services.leadconnectorhq.com/contacts/',
+      {
+        locationId: process.env.GHL_LOCATION_ID,
+        firstName: name || businessName,
+        phone: phone,
+        source: 'CallBird AI'
+      },
+      {
+        headers: {
+          'Authorization': `Bearer ${process.env.GHL_API_KEY}`,
+          'Content-Type': 'application/json',
+          'Version': '2021-07-28'
+        }
+      }
+    );
+
+    console.log('✅ Contact created:', createResponse.data.contact.id);
+    return createResponse.data.contact.id;
+
+  } catch (error) {
+    console.error('❌ GHL contact error:', error.response?.data || error.message);
+    return null;
+  }
+}
+
+// Send SMS via GoHighLevel
+async function sendGHLSMS(contactId, message) {
+  try {
+    console.log('📱 Sending SMS to contact:', contactId);
+    
+    const response = await axios.post(
+      'https://services.leadconnectorhq.com/conversations/messages',
+      {
+        type: 'SMS',
+        contactId: contactId,
+        message: message,
+        locationId: process.env.GHL_LOCATION_ID
+      },
+      {
+        headers: {
+          'Authorization': `Bearer ${process.env.GHL_API_KEY}`,
+          'Content-Type': 'application/json',
+          'Version': '2021-07-28'
+        }
+      }
+    );
+
+    console.log('✅ SMS sent successfully');
+    return true;
+  } catch (error) {
+    console.error('❌ SMS error:', error.response?.data || error.message);
+    return false;
+  }
+}
+
 function extractCustomerName(transcript) {
   // Try to extract from AI summary first
   const summaryMatch = transcript.match(/name[,:]?\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)/i);
@@ -174,7 +257,6 @@ async function handleVapiWebhook(req, res) {
       };
 
       console.log('💾 Saving call to Supabase...');
-      console.log('📝 Call record:', JSON.stringify(callRecord, null, 2));
 
       const { data: insertedCall, error: insertError } = await supabase
         .from('calls')
@@ -186,11 +268,31 @@ async function handleVapiWebhook(req, res) {
         return res.status(500).json({ error: 'Failed to save call' });
       }
       
-      console.log('✅ Call saved successfully:', {
-        client: client.business_name,
-        customer: customerName,
-        phone: customerPhone
-      });
+      console.log('✅ Call saved successfully');
+
+      // Send SMS notification via GoHighLevel
+      if (client.owner_phone && process.env.GHL_API_KEY) {
+        console.log('📱 Attempting to send SMS notification...');
+        
+        const contactId = await getOrCreateGHLContact(
+          client.owner_phone,
+          client.owner_name || client.business_name,
+          client.business_name
+        );
+
+        if (contactId) {
+          // Format SMS message
+          const smsMessage = `🔔 New Call - ${client.business_name}\n\n` +
+            `Customer: ${customerName}\n` +
+            `Phone: ${customerPhone}\n\n` +
+            `Summary:\n${aiSummary.substring(0, 120)}...\n\n` +
+            `View full details in your CallBird dashboard`;
+
+          await sendGHLSMS(contactId, smsMessage);
+        }
+      } else {
+        console.log('⚠️ SMS not configured (missing owner_phone or GHL_API_KEY)');
+      }
 
       return res.status(200).json({ 
         received: true,
