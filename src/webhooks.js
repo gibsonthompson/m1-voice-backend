@@ -1,10 +1,13 @@
 const { createClient } = require('@supabase/supabase-js');
 const axios = require('axios');
+const { Resend } = require('resend');
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_KEY
 );
+
+const resend = new Resend(process.env.RESEND_API_KEY);
 
 async function getPhoneNumberFromVapi(phoneNumberId) {
   try {
@@ -23,85 +26,80 @@ async function getPhoneNumberFromVapi(phoneNumberId) {
   }
 }
 
-// Create or find contact in GoHighLevel
-async function getOrCreateGHLContact(phone, name, businessName) {
+// Send email notification via Resend
+async function sendEmailNotification(client, callData) {
   try {
-    console.log('🔍 Looking for GHL contact:', phone);
+    console.log('📧 Sending email notification to:', client.email);
     
-    // Search for existing contact
-    const searchResponse = await axios.get(
-      'https://services.leadconnectorhq.com/contacts/search',
-      {
-        params: {
-          locationId: process.env.GHL_LOCATION_ID,
-          query: phone.replace(/\D/g, '') // Search by digits only
-        },
-        headers: {
-          'Authorization': `Bearer ${process.env.GHL_API_KEY}`,
-          'Version': '2021-07-28'
-        }
-      }
-    );
+    const emailHtml = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <style>
+          body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+          .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+          .header { background: #111D96; color: white; padding: 20px; border-radius: 8px 8px 0 0; }
+          .content { background: #f9f9f9; padding: 20px; border: 1px solid #ddd; border-top: none; }
+          .detail { margin: 10px 0; padding: 10px; background: white; border-radius: 4px; }
+          .label { font-weight: bold; color: #111D96; }
+          .summary { background: #E8EAF6; padding: 15px; border-radius: 4px; margin: 15px 0; }
+          .button { background: #F8B828; color: #111D96; padding: 12px 24px; text-decoration: none; border-radius: 4px; display: inline-block; margin-top: 15px; font-weight: bold; }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="header">
+            <h2 style="margin: 0;">🔔 New Call Received</h2>
+            <p style="margin: 5px 0 0 0; opacity: 0.9;">${client.business_name}</p>
+          </div>
+          <div class="content">
+            <div class="detail">
+              <span class="label">Customer:</span> ${callData.customerName}
+            </div>
+            <div class="detail">
+              <span class="label">Phone:</span> ${callData.customerPhone}
+            </div>
+            <div class="detail">
+              <span class="label">Time:</span> ${new Date(callData.timestamp).toLocaleString('en-US', { 
+                dateStyle: 'medium', 
+                timeStyle: 'short' 
+              })}
+            </div>
+            
+            <div class="summary">
+              <div class="label" style="margin-bottom: 10px;">📝 Call Summary:</div>
+              <p style="margin: 0;">${callData.summary}</p>
+            </div>
+            
+            <a href="https://app.callbird.com/dashboard" class="button">View Full Transcript →</a>
+            
+            <p style="margin-top: 20px; font-size: 12px; color: #666;">
+              This is an automated notification from CallBird AI. 
+              You're receiving this because a call was received on your business line.
+            </p>
+          </div>
+        </div>
+      </body>
+      </html>
+    `;
 
-    if (searchResponse.data.contacts && searchResponse.data.contacts.length > 0) {
-      console.log('✅ Found existing contact');
-      return searchResponse.data.contacts[0].id;
+    const { data, error } = await resend.emails.send({
+      from: 'CallBird AI <notifications@updates.callbirdai.com>',
+      to: [client.email],
+      subject: `🔔 New Call - ${client.business_name}`,
+      html: emailHtml
+    });
+
+    if (error) {
+      console.error('❌ Resend error:', error);
+      return false;
     }
 
-    // Create new contact if not found
-    console.log('📝 Creating new GHL contact');
-    const createResponse = await axios.post(
-      'https://services.leadconnectorhq.com/contacts/',
-      {
-        locationId: process.env.GHL_LOCATION_ID,
-        firstName: name || businessName,
-        phone: phone,
-        source: 'CallBird AI'
-      },
-      {
-        headers: {
-          'Authorization': `Bearer ${process.env.GHL_API_KEY}`,
-          'Content-Type': 'application/json',
-          'Version': '2021-07-28'
-        }
-      }
-    );
-
-    console.log('✅ Contact created:', createResponse.data.contact.id);
-    return createResponse.data.contact.id;
-
-  } catch (error) {
-    console.error('❌ GHL contact error:', error.response?.data || error.message);
-    return null;
-  }
-}
-
-// Send SMS via GoHighLevel
-async function sendGHLSMS(contactId, message) {
-  try {
-    console.log('📱 Sending SMS to contact:', contactId);
-    
-    const response = await axios.post(
-      'https://services.leadconnectorhq.com/conversations/messages',
-      {
-        type: 'SMS',
-        contactId: contactId,
-        message: message,
-        locationId: process.env.GHL_LOCATION_ID
-      },
-      {
-        headers: {
-          'Authorization': `Bearer ${process.env.GHL_API_KEY}`,
-          'Content-Type': 'application/json',
-          'Version': '2021-07-28'
-        }
-      }
-    );
-
-    console.log('✅ SMS sent successfully');
+    console.log('✅ Email sent successfully:', data.id);
     return true;
+
   } catch (error) {
-    console.error('❌ SMS error:', error.response?.data || error.message);
+    console.error('❌ Email error:', error);
     return false;
   }
 }
@@ -270,28 +268,18 @@ async function handleVapiWebhook(req, res) {
       
       console.log('✅ Call saved successfully');
 
-      // Send SMS notification via GoHighLevel
-      if (client.owner_phone && process.env.GHL_API_KEY) {
-        console.log('📱 Attempting to send SMS notification...');
+      // Send email notification via Resend
+      if (client.email && process.env.RESEND_API_KEY) {
+        console.log('📧 Attempting to send email notification...');
         
-        const contactId = await getOrCreateGHLContact(
-          client.owner_phone,
-          client.owner_name || client.business_name,
-          client.business_name
-        );
-
-        if (contactId) {
-          // Format SMS message
-          const smsMessage = `🔔 New Call - ${client.business_name}\n\n` +
-            `Customer: ${customerName}\n` +
-            `Phone: ${customerPhone}\n\n` +
-            `Summary:\n${aiSummary.substring(0, 120)}...\n\n` +
-            `View full details in your CallBird dashboard`;
-
-          await sendGHLSMS(contactId, smsMessage);
-        }
+        await sendEmailNotification(client, {
+          customerName,
+          customerPhone,
+          summary: aiSummary,
+          timestamp: new Date().toISOString()
+        });
       } else {
-        console.log('⚠️ SMS not configured (missing owner_phone or GHL_API_KEY)');
+        console.log('⚠️ Email not configured (missing client email or RESEND_API_KEY)');
       }
 
       return res.status(200).json({ 
