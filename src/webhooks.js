@@ -183,8 +183,11 @@ async function sendEmailNotification(client, callData) {
         <div class="info-row">
           <div class="info-label">Time:</div>
           <div class="info-value">${new Date(callData.timestamp).toLocaleString('en-US', { 
-            dateStyle: 'medium', 
-            timeStyle: 'short',
+            year: 'numeric',
+            month: 'short',
+            day: 'numeric',
+            hour: 'numeric',
+            minute: '2-digit',
             timeZone: clientTimezone,
             timeZoneName: 'short'
           })}</div>
@@ -207,9 +210,15 @@ async function sendEmailNotification(client, callData) {
         You're receiving this because a call was received at your business
       </p>
       <p class="timestamp">Sent at ${new Date(callData.timestamp).toLocaleString('en-US', { 
-        dateStyle: 'full', 
-        timeStyle: 'long',
-        timeZone: clientTimezone
+        weekday: 'long',
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit',
+        second: '2-digit',
+        timeZone: clientTimezone,
+        timeZoneName: 'long'
       })}</p>
     </div>
   </div>
