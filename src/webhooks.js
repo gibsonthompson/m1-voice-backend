@@ -84,7 +84,7 @@ async function sendEmailNotification(client, callData) {
     `;
 
     const { data, error } = await resend.emails.send({
-      from: 'CallBird AI <notifications@updates.callbirdai.com>',
+      from: 'CallBird AI <notifications@callbirdai.com>',
       to: [client.email],
       subject: `🔔 New Call - ${client.business_name}`,
       html: emailHtml
