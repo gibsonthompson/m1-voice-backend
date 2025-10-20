@@ -55,91 +55,144 @@ async function sendTelnyxSMS(toPhone, message) {
   }
 }
 
-// Extract customer name from transcript
+// Extract customer name from transcript (works across all industries)
 function extractCustomerName(transcript) {
   const patterns = [
     /my name is (\w+(?:\s+\w+)?)/i,
     /this is (\w+(?:\s+\w+)?)/i,
     /I'm (\w+(?:\s+\w+)?)/i,
     /I am (\w+(?:\s+\w+)?)/i,
+    /speaking with (\w+(?:\s+\w+)?)/i,
+    /call me (\w+(?:\s+\w+)?)/i,
   ];
   
   for (const pattern of patterns) {
     const match = transcript.match(pattern);
     if (match && match[1]) {
-      return match[1].trim();
+      const name = match[1].trim();
+      // Filter out common false positives
+      const excludeWords = ['calling', 'interested', 'looking', 'trying', 'hoping', 'wondering'];
+      if (!excludeWords.some(word => name.toLowerCase().includes(word))) {
+        return name;
+      }
     }
   }
   
   return 'Unknown';
 }
 
-// Extract phone number from transcript
+// Extract phone number from transcript (universal)
 function extractPhoneNumber(transcript) {
   const phonePattern = /(\+?1?\s*\(?[2-9]\d{2}\)?[\s.-]?\d{3}[\s.-]?\d{4})/;
   const match = transcript.match(phonePattern);
-  return match ? match[1].replace(/\D/g, '') : null;
+  if (match) {
+    const cleaned = match[1].replace(/\D/g, '');
+    // Return formatted phone number
+    if (cleaned.length === 10) {
+      return `(${cleaned.substring(0,3)}) ${cleaned.substring(3,6)}-${cleaned.substring(6)}`;
+    }
+    return cleaned;
+  }
+  return null;
 }
 
-// Generate smart summary from transcript
-function generateSmartSummary(transcript) {
-  if (!transcript || transcript.length < 20) {
-    return 'No summary available';
-  }
-  
-  // Try to find key information
+// Extract email from transcript (universal)
+function extractEmail(transcript) {
+  const emailPattern = /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/;
+  const match = transcript.match(emailPattern);
+  return match ? match[0] : null;
+}
+
+// Detect urgency level (universal - works for all industries)
+function detectUrgency(transcript) {
   const lowerTranscript = transcript.toLowerCase();
   
-  // Extract name
+  // Emergency keywords
+  const emergencyWords = ['emergency', 'urgent', 'asap', 'immediately', 'right now', 'critical', 'serious'];
+  const hasEmergency = emergencyWords.some(word => lowerTranscript.includes(word));
+  
+  if (hasEmergency) return 'HIGH';
+  
+  // Medium urgency keywords
+  const mediumWords = ['soon', 'quickly', 'today', 'this week'];
+  const hasMedium = mediumWords.some(word => lowerTranscript.includes(word));
+  
+  if (hasMedium) return 'MEDIUM';
+  
+  return 'NORMAL';
+}
+
+// Generate smart summary from transcript (industry-agnostic)
+function generateSmartSummary(transcript) {
+  if (!transcript || transcript.length < 20) {
+    return 'Customer called - no details captured';
+  }
+  
+  const lowerTranscript = transcript.toLowerCase();
+  
+  // Extract key information
   const name = extractCustomerName(transcript);
-  
-  // Extract phone
   const phone = extractPhoneNumber(transcript);
+  const email = extractEmail(transcript);
+  const urgency = detectUrgency(transcript);
   
-  // Look for urgency keywords
-  const isUrgent = lowerTranscript.includes('emergency') || 
-                   lowerTranscript.includes('urgent') || 
-                   lowerTranscript.includes('asap');
+  // Look for common inquiry patterns (universal)
+  let inquiryType = null;
   
-  // Look for service keywords
-  let service = null;
-  if (lowerTranscript.includes('leak')) service = 'leak';
-  else if (lowerTranscript.includes('drain') || lowerTranscript.includes('clog')) service = 'drain issue';
-  else if (lowerTranscript.includes('water heater')) service = 'water heater';
-  else if (lowerTranscript.includes('toilet')) service = 'toilet repair';
-  else if (lowerTranscript.includes('sink')) service = 'sink repair';
-  else if (lowerTranscript.includes('faucet')) service = 'faucet issue';
+  if (lowerTranscript.includes('question about') || lowerTranscript.includes('wondering about')) {
+    inquiryType = 'inquiry';
+  } else if (lowerTranscript.includes('appointment') || lowerTranscript.includes('schedule') || lowerTranscript.includes('book')) {
+    inquiryType = 'appointment request';
+  } else if (lowerTranscript.includes('price') || lowerTranscript.includes('cost') || lowerTranscript.includes('quote')) {
+    inquiryType = 'pricing inquiry';
+  } else if (lowerTranscript.includes('problem') || lowerTranscript.includes('issue') || lowerTranscript.includes('help')) {
+    inquiryType = 'service request';
+  } else if (lowerTranscript.includes('interested in') || lowerTranscript.includes('looking for')) {
+    inquiryType = 'general inquiry';
+  }
   
   // Build smart summary
   let summary = '';
+  
   if (name && name !== 'Unknown') {
     summary += `${name} called`;
   } else {
     summary += 'Customer called';
   }
   
-  if (service) {
-    summary += ` about ${service}`;
+  if (inquiryType) {
+    summary += ` with ${inquiryType}`;
   }
   
-  if (isUrgent) {
+  if (urgency === 'HIGH') {
     summary += ' (URGENT)';
   }
   
-  if (summary.length > 20) {
-    if (phone) summary += `. Contact: ${phone}`;
+  // Add contact info if available
+  let contactInfo = [];
+  if (phone) contactInfo.push(phone);
+  if (email) contactInfo.push(email);
+  
+  if (contactInfo.length > 0) {
+    summary += `. Contact: ${contactInfo.join(', ')}`;
+  }
+  
+  if (summary.length > 30) {
     return summary.trim() + '.';
   }
   
-  // Fallback: take first meaningful sentence
-  const cleaned = transcript.trim();
-  const firstSentence = cleaned.split(/[.!?]/).filter(s => s.trim().length > 10)[0];
+  // Fallback: extract first meaningful sentence
+  const sentences = transcript.split(/[.!?]/).filter(s => s.trim().length > 15);
   
-  if (firstSentence && firstSentence.length < 200) {
-    return firstSentence.trim() + '.';
+  if (sentences.length > 0) {
+    const firstSentence = sentences[0].trim();
+    if (firstSentence.length < 200) {
+      return firstSentence + '.';
+    }
   }
   
-  return cleaned.substring(0, 200) + (cleaned.length > 200 ? '...' : '');
+  // Last resort: truncate transcript
+  return transcript.substring(0, 150).trim() + '...';
 }
 
 // Main webhook handler
@@ -180,9 +233,11 @@ async function handleVapiWebhook(req, res) {
       const transcript = message.transcript || '';
       const callerPhone = call.customer?.number || 'Unknown';
       
-      // Extract information
+      // Extract information (industry-agnostic)
       const customerName = extractCustomerName(transcript);
       const customerPhone = extractPhoneNumber(transcript) || callerPhone;
+      const customerEmail = extractEmail(transcript);
+      const urgency = detectUrgency(transcript);
       const aiSummary = generateSmartSummary(transcript);
       
       // Save to database
@@ -196,6 +251,9 @@ async function handleVapiWebhook(req, res) {
       };
 
       console.log('💾 Saving call to Supabase...');
+      console.log('   Customer:', customerName);
+      console.log('   Phone:', customerPhone);
+      console.log('   Urgency:', urgency);
 
       const { data: insertedCall, error: insertError } = await supabase
         .from('calls')
@@ -213,14 +271,22 @@ async function handleVapiWebhook(req, res) {
       if (client.owner_phone) {
         console.log('📱 Preparing SMS notification...');
         
-        const smsMessage = `🔔 New Call - ${client.business_name}
-
-Customer: ${customerName}
-Phone: ${customerPhone}
-
-Summary: ${aiSummary}
-
-View full details in your CallBird dashboard.`;
+        // Build SMS message (works for any industry)
+        let smsMessage = `🔔 New Call - ${client.business_name}\n\n`;
+        
+        smsMessage += `Customer: ${customerName}\n`;
+        smsMessage += `Phone: ${customerPhone}\n`;
+        
+        if (customerEmail) {
+          smsMessage += `Email: ${customerEmail}\n`;
+        }
+        
+        if (urgency === 'HIGH') {
+          smsMessage += `⚠️ Urgency: HIGH\n`;
+        }
+        
+        smsMessage += `\nSummary: ${aiSummary}\n\n`;
+        smsMessage += `View full transcript in your CallBird dashboard.`;
 
         const smsSent = await sendTelnyxSMS(client.owner_phone, smsMessage);
         
@@ -237,7 +303,14 @@ View full details in your CallBird dashboard.`;
         received: true,
         saved: true,
         callId: insertedCall[0]?.id,
-        smsSent: !!client.owner_phone
+        smsSent: !!client.owner_phone,
+        extractedData: {
+          customerName,
+          customerPhone,
+          customerEmail,
+          urgency,
+          summary: aiSummary
+        }
       });
     }
 
