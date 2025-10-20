@@ -32,61 +32,189 @@ async function sendEmailNotification(client, callData) {
     console.log('📧 Sending email notification to:', client.email);
     
     const emailHtml = `
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <style>
-          body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
-          .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-          .header { background: #111D96; color: white; padding: 20px; border-radius: 8px 8px 0 0; }
-          .content { background: #f9f9f9; padding: 20px; border: 1px solid #ddd; border-top: none; }
-          .detail { margin: 10px 0; padding: 10px; background: white; border-radius: 4px; }
-          .label { font-weight: bold; color: #111D96; }
-          .summary { background: #E8EAF6; padding: 15px; border-radius: 4px; margin: 15px 0; }
-          .button { background: #F8B828; color: #111D96; padding: 12px 24px; text-decoration: none; border-radius: 4px; display: inline-block; margin-top: 15px; font-weight: bold; }
-        </style>
-      </head>
-      <body>
-        <div class="container">
-          <div class="header">
-            <h2 style="margin: 0;">🔔 New Call Received</h2>
-            <p style="margin: 5px 0 0 0; opacity: 0.9;">${client.business_name}</p>
-          </div>
-          <div class="content">
-            <div class="detail">
-              <span class="label">Customer:</span> ${callData.customerName}
-            </div>
-            <div class="detail">
-              <span class="label">Phone:</span> ${callData.customerPhone}
-            </div>
-            <div class="detail">
-              <span class="label">Time:</span> ${new Date(callData.timestamp).toLocaleString('en-US', { 
-                dateStyle: 'medium', 
-                timeStyle: 'short' 
-              })}
-            </div>
-            
-            <div class="summary">
-              <div class="label" style="margin-bottom: 10px;">📝 Call Summary:</div>
-              <p style="margin: 0;">${callData.summary}</p>
-            </div>
-            
-            <a href="https://app.callbird.com/dashboard" class="button">View Full Transcript →</a>
-            
-            <p style="margin-top: 20px; font-size: 12px; color: #666;">
-              This is an automated notification from CallBird AI. 
-              You're receiving this because a call was received on your business line.
-            </p>
-          </div>
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      background-color: #FAFAF8;
+    }
+    .container {
+      max-width: 600px;
+      margin: 40px auto;
+      background-color: #ffffff;
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: 0 4px 6px rgba(18, 32, 146, 0.08);
+    }
+    .header {
+      background: linear-gradient(135deg, #122092 0%, #1a2db5 100%);
+      padding: 32px 24px;
+      text-align: center;
+    }
+    .header h1 {
+      margin: 0;
+      color: #FAFAF8;
+      font-size: 24px;
+      font-weight: 600;
+      letter-spacing: -0.5px;
+    }
+    .header p {
+      margin: 8px 0 0 0;
+      color: #FAFAF8;
+      font-size: 14px;
+      opacity: 0.9;
+    }
+    .content {
+      padding: 32px 24px;
+    }
+    .call-info {
+      background-color: #FAFAF8;
+      border-left: 4px solid #F8B828;
+      border-radius: 8px;
+      padding: 20px;
+      margin-bottom: 24px;
+    }
+    .info-row {
+      display: flex;
+      margin-bottom: 12px;
+      align-items: flex-start;
+    }
+    .info-row:last-child {
+      margin-bottom: 0;
+    }
+    .info-label {
+      font-weight: 600;
+      color: #122092;
+      min-width: 120px;
+      font-size: 14px;
+    }
+    .info-value {
+      color: #2d3748;
+      font-size: 14px;
+      line-height: 1.6;
+    }
+    .summary-box {
+      background-color: #ffffff;
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      padding: 20px;
+      margin-bottom: 24px;
+    }
+    .summary-title {
+      color: #122092;
+      font-size: 16px;
+      font-weight: 600;
+      margin: 0 0 12px 0;
+    }
+    .summary-text {
+      color: #4a5568;
+      font-size: 14px;
+      line-height: 1.7;
+      margin: 0;
+    }
+    .button-container {
+      text-align: center;
+      margin: 32px 0;
+    }
+    .button {
+      display: inline-block;
+      background-color: #122092;
+      color: #FAFAF8;
+      text-decoration: none;
+      padding: 14px 32px;
+      border-radius: 8px;
+      font-weight: 600;
+      font-size: 15px;
+      transition: background-color 0.2s;
+      box-shadow: 0 2px 4px rgba(18, 32, 146, 0.2);
+    }
+    .button:hover {
+      background-color: #0d1870;
+    }
+    .footer {
+      background-color: #FAFAF8;
+      padding: 24px;
+      text-align: center;
+      border-top: 1px solid #e2e8f0;
+    }
+    .footer-text {
+      color: #718096;
+      font-size: 13px;
+      margin: 0;
+      line-height: 1.6;
+    }
+    .timestamp {
+      color: #a0aec0;
+      font-size: 12px;
+      margin-top: 8px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>🔔 New Call Received</h1>
+      <p>CallBird AI Notification</p>
+    </div>
+    
+    <div class="content">
+      <div class="call-info">
+        <div class="info-row">
+          <div class="info-label">Customer:</div>
+          <div class="info-value"><strong>${callData.customerName}</strong></div>
         </div>
-      </body>
-      </html>
+        <div class="info-row">
+          <div class="info-label">Phone:</div>
+          <div class="info-value">${callData.customerPhone}</div>
+        </div>
+        <div class="info-row">
+          <div class="info-label">Business:</div>
+          <div class="info-value">${client.business_name}</div>
+        </div>
+        <div class="info-row">
+          <div class="info-label">Time:</div>
+          <div class="info-value">${new Date(callData.timestamp).toLocaleString('en-US', { 
+            dateStyle: 'medium', 
+            timeStyle: 'short' 
+          })}</div>
+        </div>
+      </div>
+
+      <div class="summary-box">
+        <h2 class="summary-title">Call Summary</h2>
+        <p class="summary-text">${callData.summary}</p>
+      </div>
+
+      <div class="button-container">
+        <a href="https://callbirdai.com/dashboard" class="button">View Full Details</a>
+      </div>
+    </div>
+
+    <div class="footer">
+      <p class="footer-text">
+        This is an automated notification from CallBird AI<br>
+        You're receiving this because a call was received at your business
+      </p>
+      <p class="timestamp">Sent at ${new Date(callData.timestamp).toLocaleString('en-US', { 
+        dateStyle: 'full', 
+        timeStyle: 'long' 
+      })}</p>
+    </div>
+  </div>
+</body>
+</html>
     `;
 
     const { data, error } = await resend.emails.send({
       from: 'CallBird AI <notifications@callbirdai.com>',
       to: [client.email],
-      subject: `🔔 New Call - ${client.business_name}`,
+      subject: `🔔 New Call from ${callData.customerName} - ${client.business_name}`,
       html: emailHtml
     });
 
@@ -104,14 +232,13 @@ async function sendEmailNotification(client, callData) {
   }
 }
 
+// Fallback extraction functions (used if VAPI analysis fails)
 function extractCustomerName(transcript) {
-  // Try to extract from AI summary first
   const summaryMatch = transcript.match(/name[,:]?\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)/i);
   if (summaryMatch && summaryMatch[1]) {
     return summaryMatch[1].trim();
   }
 
-  // Fallback to original patterns
   const patterns = [
     /my name is ([a-z\s]+?)(?:\.|,|$|user:|ai:|email)/i,
     /this is ([a-z\s]+?)(?:\.|,|$|user:|ai:|email)/i,
@@ -135,7 +262,6 @@ function extractCustomerName(transcript) {
 }
 
 function extractPhoneNumber(transcript) {
-  // Try to extract from AI confirmation first (most reliable)
   const confirmMatch = transcript.match(/(?:phone[,:]?|that is)\s+((?:\d[\s.]*){10,11})/i);
   if (confirmMatch) {
     const cleaned = confirmMatch[1].replace(/[\s.\-()]/g, '');
@@ -147,7 +273,6 @@ function extractPhoneNumber(transcript) {
     }
   }
 
-  // Try standard format
   const standardMatch = transcript.match(/(\d{3}[-.\s]?\d{3}[-.\s]?\d{4})/);
   if (standardMatch) {
     const cleaned = standardMatch[1].replace(/[\s.\-]/g, '');
@@ -156,7 +281,6 @@ function extractPhoneNumber(transcript) {
     }
   }
 
-  // Try digit by digit (must be exactly 10 digits with spaces)
   const digitMatch = transcript.match(/(\d\s+\d\s+\d\s+\d\s+\d\s+\d\s+\d\s+\d\s+\d\s+\d)(?!\s*\d)/);
   if (digitMatch) {
     const cleaned = digitMatch[1].replace(/\s+/g, '');
@@ -171,11 +295,9 @@ function extractPhoneNumber(transcript) {
 function generateSmartSummary(transcript) {
   if (!transcript) return 'Call completed - no transcript available';
   
-  // Try to find the AI's summary section
   const summaryMatch = transcript.match(/Here's a summary of your information[,:]?(.*?)(?:Our scheduling team|Is there anything else|User:|$)/is);
   
   if (summaryMatch && summaryMatch[1]) {
-    // Extract key info from AI's summary
     const summaryText = summaryMatch[1].trim();
     
     const name = summaryText.match(/name[,:]?\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)/i)?.[1];
@@ -195,7 +317,6 @@ function generateSmartSummary(transcript) {
     }
   }
   
-  // Fallback: take first meaningful sentence
   const cleaned = transcript.trim();
   const firstSentence = cleaned.split(/[.!?]/).filter(s => s.trim().length > 10)[0];
   
@@ -241,9 +362,20 @@ async function handleVapiWebhook(req, res) {
       const transcript = message.transcript || '';
       const callerPhone = call.customer?.number || 'Unknown';
       
-      const customerName = extractCustomerName(transcript);
-      const customerPhone = extractPhoneNumber(transcript) || callerPhone;
-      const aiSummary = generateSmartSummary(transcript);
+      // Try to get structured data from VAPI analysis first
+      const analysis = call.analysis || {};
+      const structuredData = analysis.structuredData || {};
+      
+      // Use VAPI's extracted data if available, otherwise fallback to regex
+      const customerName = structuredData.customerName || extractCustomerName(transcript);
+      const customerPhone = structuredData.customerPhone || extractPhoneNumber(transcript) || callerPhone;
+      const aiSummary = analysis.summary || generateSmartSummary(transcript);
+      
+      console.log('📊 Extracted data:', {
+        name: customerName,
+        phone: customerPhone,
+        summary: aiSummary.substring(0, 100) + '...'
+      });
       
       const callRecord = {
         client_id: client.id,
