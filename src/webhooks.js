@@ -244,12 +244,48 @@ async function handleVapiWebhook(req, res) {
       const transcript = message.transcript || '';
       const callerPhone = call.customer?.number || 'Unknown';
       
-      // Extract information (industry-agnostic)
-      const customerName = extractCustomerName(transcript);
-      const customerPhone = extractPhoneNumber(transcript) || callerPhone;
+      // Use VAPI's analysis if available, otherwise fallback to extraction
+      const analysis = message.analysis || {};
+      
+      const customerName = analysis.structuredData?.customerName || 
+                          extractCustomerName(transcript);
+      
+      const customerPhone = analysis.structuredData?.customerPhone || 
+                           extractPhoneNumber(transcript) || 
+                           callerPhone;
+      
       const customerEmail = extractEmail(transcript);
-      const urgency = detectUrgency(transcript);
-      const aiSummary = generateSmartSummary(transcript);
+      
+      const urgency = analysis.structuredData?.urgency || 
+                     detectUrgency(transcript);
+      
+      const serviceType = analysis.structuredData?.serviceType || null;
+      
+      // Build smart summary using VAPI data
+      let aiSummary = '';
+      if (customerName && customerName !== 'Unknown') {
+        aiSummary = `${customerName} called`;
+      } else {
+        aiSummary = 'Customer called';
+      }
+      
+      if (serviceType) {
+        aiSummary += ` about ${serviceType}`;
+      }
+      
+      if (analysis.structuredData?.appointmentRequested) {
+        aiSummary += ' - requested appointment';
+      }
+      
+      if (urgency === 'HIGH' || urgency === 'high') {
+        aiSummary += ' (URGENT)';
+      }
+      
+      if (customerPhone && customerPhone !== 'Unknown') {
+        aiSummary += `. Contact: ${customerPhone}`;
+      }
+      
+      aiSummary = aiSummary.trim() + '.';
       
       // Save to database
       const callRecord = {
