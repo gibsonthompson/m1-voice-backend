@@ -31,6 +31,9 @@ async function sendEmailNotification(client, callData) {
   try {
     console.log('📧 Sending email notification to:', client.email);
     
+    // Use client's timezone or default to Eastern
+    const clientTimezone = client.timezone || 'America/New_York';
+    
     const emailHtml = `
 <!DOCTYPE html>
 <html>
@@ -181,7 +184,9 @@ async function sendEmailNotification(client, callData) {
           <div class="info-label">Time:</div>
           <div class="info-value">${new Date(callData.timestamp).toLocaleString('en-US', { 
             dateStyle: 'medium', 
-            timeStyle: 'short' 
+            timeStyle: 'short',
+            timeZone: clientTimezone,
+            timeZoneName: 'short'
           })}</div>
         </div>
       </div>
@@ -203,7 +208,8 @@ async function sendEmailNotification(client, callData) {
       </p>
       <p class="timestamp">Sent at ${new Date(callData.timestamp).toLocaleString('en-US', { 
         dateStyle: 'full', 
-        timeStyle: 'long' 
+        timeStyle: 'long',
+        timeZone: clientTimezone
       })}</p>
     </div>
   </div>
@@ -358,6 +364,7 @@ async function handleVapiWebhook(req, res) {
       }
 
       console.log('✅ Client found:', client.business_name);
+      console.log('🌍 Client timezone:', client.timezone || 'America/New_York (default)');
 
       const transcript = message.transcript || '';
       const callerPhone = call.customer?.number || 'Unknown';
