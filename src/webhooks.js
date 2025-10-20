@@ -31,16 +31,27 @@ async function sendTelnyxSMS(toPhone, message) {
     console.log('   To:', toPhone);
     console.log('   Message length:', message.length, 'chars');
     
+    // DEBUG: Check API key
+    const apiKey = process.env.TELNYX_API_KEY;
+    console.log('🔍 DEBUG - API Key exists:', !!apiKey);
+    console.log('🔍 DEBUG - API Key length:', apiKey?.length);
+    console.log('🔍 DEBUG - API Key first 10 chars:', apiKey?.substring(0, 10));
+    console.log('🔍 DEBUG - API Key last 4 chars:', apiKey?.substring(apiKey.length - 4));
+    
+    if (!apiKey) {
+      throw new Error('TELNYX_API_KEY environment variable not set');
+    }
+    
     const response = await axios.post(
       'https://api.telnyx.com/v2/messages',
       {
-        from: '+15055573160', // Your notification number
+        from: '+14046719089', // Your Telnyx number
         to: toPhone,
         text: message
       },
       {
         headers: {
-          'Authorization': `Bearer ${process.env.TELNYX_API_KEY}`,
+          'Authorization': `Bearer ${apiKey}`,
           'Content-Type': 'application/json'
         }
       }
