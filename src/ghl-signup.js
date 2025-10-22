@@ -2,11 +2,13 @@ const { createClient } = require('@supabase/supabase-js');
 const fetch = require('node-fetch');
 const crypto = require('crypto');
 
+// Initialize Supabase with SERVICE KEY
 const supabase = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_SERVICE_KEY
 );
 
+// VAPI Template IDs by industry
 const VAPI_TEMPLATES = {
   'home_services': '6f10579e-1a4d-4ad2-bbb0-8d4acb577569',
   'medical': '1c0ace33-8229-4af4-9be8-d2beb955fa82',
@@ -15,6 +17,7 @@ const VAPI_TEMPLATES = {
   'restaurants': '360775b7-9573-45a7-9789-595b8acf25d9'
 };
 
+// Map GHL industry strings to template keys
 const INDUSTRY_MAP = {
   'Home Services (plumbing, HVAC, contractors)': 'home_services',
   'Medical/Dental': 'medical',
@@ -23,6 +26,7 @@ const INDUSTRY_MAP = {
   'Restaurants/Food Service': 'restaurants'
 };
 
+// Format phone number to E.164 standard (+1XXXXXXXXXX)
 function formatPhoneE164(phone) {
   const digits = phone.replace(/\D/g, '');
   if (digits.length === 10) return `+1${digits}`;
@@ -30,6 +34,7 @@ function formatPhoneE164(phone) {
   return `+${digits}`;
 }
 
+// Validate and clean area code (must be 3 digits)
 function validateAreaCode(areaCode) {
   if (!areaCode) return '404';
   const cleaned = String(areaCode).replace(/\D/g, '');
@@ -37,14 +42,16 @@ function validateAreaCode(areaCode) {
   return '404';
 }
 
+// Generate secure random token for password reset
 function generatePasswordToken() {
   return crypto.randomBytes(32).toString('hex');
 }
 
+// Store password reset token in database
 async function createPasswordToken(userId, email) {
   const token = generatePasswordToken();
   const expiresAt = new Date();
-  expiresAt.setHours(expiresAt.getHours() + 24);
+  expiresAt.setHours(expiresAt.getHours() + 24); // Expires in 24 hours
   
   const { data, error } = await supabase
     .from('password_reset_tokens')
@@ -59,13 +66,14 @@ async function createPasswordToken(userId, email) {
     .single();
   
   if (error) {
-    console.error('Error creating password token:', error);
+    console.error('❌ Error creating password token:', error);
     throw new Error('Failed to create password token');
   }
   
   return token;
 }
 
+// Fetch VAPI assistant template configuration
 async function getVAPITemplate(templateId) {
   const response = await fetch(`https://api.vapi.ai/assistant/${templateId}`, {
     method: 'GET',
@@ -76,13 +84,16 @@ async function getVAPITemplate(templateId) {
   });
   
   if (!response.ok) {
-    throw new Error(`Failed to get VAPI template: ${response.statusText}`);
+    const errorText = await response.text();
+    throw new Error(`Failed to get VAPI template: ${errorText}`);
   }
   
   return await response.json();
 }
 
+// Create customized VAPI assistant from template
 async function createVAPIAssistant(templateConfig, businessName) {
+  // Customize the system prompt with business details
   const customizedPrompt = templateConfig.model.messages[0].content
     .replace('{{business_name}}', businessName)
     .replace('{{business_hours}}', 'Monday-Friday 9am-5pm');
@@ -110,17 +121,18 @@ async function createVAPIAssistant(templateConfig, businessName) {
   });
   
   if (!response.ok) {
-    const error = await response.text();
-    throw new Error(`Failed to create VAPI assistant: ${error}`);
+    const errorText = await response.text();
+    throw new Error(`Failed to create VAPI assistant: ${errorText}`);
   }
   
   return await response.json();
 }
 
+// Purchase VAPI phone number with specified area code
 async function provisionVAPIPhone(assistantId, areaCode) {
   const validAreaCode = validateAreaCode(areaCode);
   
-  console.log(`📞 Buying phone with area code: ${validAreaCode}`);
+  console.log(`📞 Purchasing phone number with area code: ${validAreaCode}`);
   
   const buyResponse = await fetch('https://api.vapi.ai/phone-number/buy', {
     method: 'POST',
@@ -136,15 +148,16 @@ async function provisionVAPIPhone(assistantId, areaCode) {
   });
   
   if (!buyResponse.ok) {
-    const error = await buyResponse.text();
-    throw new Error(`Failed to buy phone number: ${error}`);
+    const errorText = await buyResponse.text();
+    throw new Error(`Failed to buy phone number: ${errorText}`);
   }
   
   const phoneData = await buyResponse.json();
-  console.log(`✅ Phone purchased: ${phoneData.number}`);
+  console.log(`✅ Phone number purchased: ${phoneData.number}`);
   return phoneData.number;
 }
 
+// Send welcome email with password setup link via Resend
 async function sendWelcomeEmail(email, firstName, businessName, vapiPhone, token) {
   const setPasswordUrl = `https://callbird-dashboard.vercel.app/auth/set-password?token=${token}`;
   
@@ -288,44 +301,51 @@ async function sendWelcomeEmail(email, firstName, businessName, vapiPhone, token
     }
     
     const result = await response.json();
-    console.log(`✅ Email sent successfully to ${email} (ID: ${result.id})`);
+    console.log(`✅ Email sent successfully to ${email} (Resend ID: ${result.id})`);
     
   } catch (error) {
     console.error('❌ Email error:', error);
-    // Don't throw - we don't want email failure to stop account creation
+    // Don't throw - we don't want email failure to block account creation
+    // User can still use "forgot password" flow if email fails
   }
 }
 
+// Main webhook handler for GHL signups
 async function handleGHLSignup(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
   
-  console.log('📥 GHL Webhook:', req.body);
+  console.log('📥 GHL Webhook received:', req.body);
   
   try {
+    // Extract and validate required fields from webhook
     const { email, first_name, phone, business_name, industry, area_code } = req.body;
     
     if (!email || !first_name || !phone || !business_name || !industry) {
+      console.error('❌ Missing required fields');
       return res.status(400).json({ 
         error: 'Missing required fields',
         received: req.body
       });
     }
     
+    // Format and validate data
     const formattedPhone = formatPhoneE164(phone);
     const industryKey = INDUSTRY_MAP[industry];
     
     if (!industryKey) {
+      console.error('❌ Invalid industry:', industry);
       return res.status(400).json({ 
         error: 'Invalid industry',
-        received: industry
+        received: industry,
+        valid_options: Object.keys(INDUSTRY_MAP)
       });
     }
     
     const validatedAreaCode = validateAreaCode(area_code);
     
-    console.log('✅ Validated:', { 
+    console.log('✅ Data validated:', { 
       email, 
       first_name, 
       formattedPhone, 
@@ -334,49 +354,63 @@ async function handleGHLSignup(req, res) {
       area_code: validatedAreaCode 
     });
     
-    const { data: existingUser } = await supabase
+    // CRITICAL: Check for duplicates FIRST before creating any expensive resources
+    console.log('🔍 Checking for existing accounts...');
+    
+    const { data: existingUser, error: userCheckError } = await supabase
       .from('users')
-      .select('id')
+      .select('id, client_id')
       .eq('email', email)
       .single();
     
     if (existingUser) {
-      console.log('⚠️ User exists:', email);
+      console.log('⚠️ User already exists:', email);
       return res.status(200).json({ 
-        message: 'User already exists', 
-        user_id: existingUser.id 
+        success: false,
+        message: 'An account already exists for this email address',
+        user_id: existingUser.id,
+        client_id: existingUser.client_id
       });
     }
     
-    const { data: existingClient } = await supabase
+    const { data: existingClient, error: clientCheckError } = await supabase
       .from('clients')
-      .select('id')
+      .select('id, business_name')
       .eq('email', email)
       .single();
     
     if (existingClient) {
-      console.log('⚠️ Client exists:', email);
+      console.log('⚠️ Client already exists:', email);
       return res.status(200).json({ 
-        message: 'Client already exists', 
-        client_id: existingClient.id 
+        success: false,
+        message: 'A business account already exists for this email address',
+        client_id: existingClient.id,
+        business_name: existingClient.business_name
       });
     }
     
-    console.log('🤖 Getting VAPI template for:', industryKey);
+    console.log('✅ No duplicates found - proceeding with account creation');
+    
+    // Get VAPI assistant template for the industry
+    console.log(`🤖 Fetching VAPI template for industry: ${industryKey}`);
     const templateId = VAPI_TEMPLATES[industryKey];
     const templateConfig = await getVAPITemplate(templateId);
+    console.log('✅ Template fetched');
     
-    console.log('🛠️ Creating assistant...');
+    // Create customized VAPI assistant
+    console.log('🛠️ Creating VAPI assistant...');
     const assistant = await createVAPIAssistant(templateConfig, business_name);
-    console.log('✅ Assistant:', assistant.id);
+    console.log(`✅ Assistant created: ${assistant.id}`);
     
-    console.log('📞 Provisioning phone...');
+    // Purchase phone number and link to assistant
+    console.log('📞 Provisioning phone number...');
     const vapiPhone = await provisionVAPIPhone(assistant.id, validatedAreaCode);
-    console.log('✅ Phone:', vapiPhone);
+    console.log(`✅ Phone provisioned: ${vapiPhone}`);
     
-    console.log('💾 Creating client record...');
+    // Create client record in Supabase
+    console.log('💾 Creating client record in database...');
     const trialEndsAt = new Date();
-    trialEndsAt.setDate(trialEndsAt.getDate() + 7);
+    trialEndsAt.setDate(trialEndsAt.getDate() + 7); // 7-day trial
     
     const { data: newClient, error: clientError } = await supabase
       .from('clients')
@@ -398,18 +432,19 @@ async function handleGHLSignup(req, res) {
       .single();
     
     if (clientError) {
-      console.error('❌ Client Error:', clientError);
-      throw new Error(`Database error: ${clientError.message}`);
+      console.error('❌ Failed to create client:', clientError);
+      throw new Error(`Database error creating client: ${clientError.message}`);
     }
     
-    console.log('✅ Client created:', newClient.id);
+    console.log(`✅ Client created: ${newClient.id}`);
     
+    // Create user record (for authentication)
     console.log('👤 Creating user record...');
     const { data: newUser, error: userError } = await supabase
       .from('users')
       .insert({
         email: email,
-        password_hash: null,
+        password_hash: null, // Will be set when user clicks password setup link
         first_name: first_name,
         client_id: newClient.id,
         created_at: new Date().toISOString()
@@ -418,34 +453,39 @@ async function handleGHLSignup(req, res) {
       .single();
     
     if (userError) {
-      console.error('❌ User Error:', userError);
-      throw new Error(`Failed to create user: ${userError.message}`);
+      console.error('❌ Failed to create user:', userError);
+      throw new Error(`Database error creating user: ${userError.message}`);
     }
     
-    console.log('✅ User created:', newUser.id);
+    console.log(`✅ User created: ${newUser.id}`);
     
-    console.log('🔐 Creating password setup token...');
+    // Generate password setup token
+    console.log('🔐 Generating password setup token...');
     const token = await createPasswordToken(newUser.id, email);
-    console.log('✅ Token created');
+    console.log('✅ Token generated');
     
+    // Send welcome email with password setup link
     console.log('📧 Sending welcome email...');
     await sendWelcomeEmail(email, first_name, business_name, vapiPhone, token);
     
-    console.log('🎉 Onboarding complete!');
+    console.log('🎉 Account creation complete!');
+    
     return res.status(200).json({
       success: true,
       client_id: newClient.id,
       user_id: newUser.id,
+      vapi_assistant_id: assistant.id,
       vapi_phone: vapiPhone,
       area_code: validatedAreaCode,
-      trial_ends_at: trialEndsAt,
+      trial_ends_at: trialEndsAt.toISOString(),
       message: 'Account created successfully. Welcome email sent to customer.'
     });
     
   } catch (error) {
-    console.error('❌ Error:', error);
+    console.error('❌ Webhook error:', error);
     return res.status(500).json({ 
-      error: 'Internal error', 
+      success: false,
+      error: 'Internal server error', 
       message: error.message 
     });
   }
