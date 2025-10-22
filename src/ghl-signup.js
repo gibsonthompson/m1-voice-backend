@@ -33,6 +33,14 @@ function formatPhoneE164(phone) {
   return `+${digits}`;
 }
 
+// Validate area code (must be 3 digits)
+function validateAreaCode(areaCode) {
+  if (!areaCode) return '404'; // Default
+  const cleaned = String(areaCode).replace(/\D/g, '');
+  if (cleaned.length === 3) return cleaned;
+  return '404'; // Fallback if invalid
+}
+
 // Get VAPI template
 async function getVAPITemplate(templateId) {
   const response = await fetch(`https://api.vapi.ai/assistant/${templateId}`, {
@@ -86,8 +94,12 @@ async function createVAPIAssistant(templateConfig, businessName) {
   return await response.json();
 }
 
-// Buy VAPI phone number
-async function provisionVAPIPhone(assistantId) {
+// Buy VAPI phone number with custom area code
+async function provisionVAPIPhone(assistantId, areaCode = '404') {
+  const validAreaCode = validateAreaCode(areaCode);
+  
+  console.log(`📞 Attempting to buy phone number with area code: ${validAreaCode}`);
+  
   const buyResponse = await fetch('https://api.vapi.ai/phone-number/buy', {
     method: 'POST',
     headers: {
@@ -95,7 +107,7 @@ async function provisionVAPIPhone(assistantId) {
       'Content-Type': 'application/json'
     },
     body: JSON.stringify({
-      areaCode: '404',
+      areaCode: validAreaCode,
       name: `Assistant Phone`,
       assistantId: assistantId
     })
@@ -107,13 +119,14 @@ async function provisionVAPIPhone(assistantId) {
   }
   
   const phoneData = await buyResponse.json();
+  console.log(`✅ Phone number purchased: ${phoneData.number}`);
   return phoneData.number;
 }
 
 // Send welcome email
 async function sendWelcomeEmail(email, firstName, businessName, vapiPhone) {
   console.log(`📧 Welcome email for ${email} - Phone: ${vapiPhone}`);
-  // TODO: Add email service
+  // TODO: Add email service later
 }
 
 // Main handler
@@ -125,22 +138,42 @@ async function handleGHLSignup(req, res) {
   console.log('📥 GHL Webhook:', req.body);
   
   try {
-    const { email, first_name, phone, business_name, industry } = req.body;
+    // Extract data from webhook - NOW INCLUDING AREA CODE
+    const { email, first_name, phone, business_name, industry, area_code } = req.body;
     
+    // Validate required fields (area_code is optional)
     if (!email || !first_name || !phone || !business_name || !industry) {
-      return res.status(400).json({ error: 'Missing required fields', received: req.body });
+      return res.status(400).json({ 
+        error: 'Missing required fields',
+        received: req.body
+      });
     }
     
+    // Format phone number
     const formattedPhone = formatPhoneE164(phone);
-    const industryKey = INDUSTRY_MAP[industry];
     
+    // Map industry
+    const industryKey = INDUSTRY_MAP[industry];
     if (!industryKey) {
-      return res.status(400).json({ error: 'Invalid industry', received: industry });
+      return res.status(400).json({ 
+        error: 'Invalid industry',
+        received: industry
+      });
     }
     
-    console.log('✅ Validated:', { email, first_name, formattedPhone, business_name, industryKey });
+    // Validate and set area code (defaults to 404 if not provided)
+    const validatedAreaCode = validateAreaCode(area_code);
     
-    // Check existing
+    console.log('✅ Validated:', { 
+      email, 
+      first_name, 
+      formattedPhone, 
+      business_name, 
+      industryKey,
+      area_code: validatedAreaCode 
+    });
+    
+    // Check if user exists
     const { data: existing } = await supabase
       .from('clients')
       .select('id')
@@ -149,25 +182,28 @@ async function handleGHLSignup(req, res) {
     
     if (existing) {
       console.log('⚠️ User exists:', email);
-      return res.status(200).json({ message: 'User exists', client_id: existing.id });
+      return res.status(200).json({ 
+        message: 'User exists', 
+        client_id: existing.id 
+      });
     }
     
-    // Get template
-    console.log('🤖 Getting VAPI template...');
+    // Get VAPI template
+    console.log('🤖 Getting VAPI template for:', industryKey);
     const templateId = VAPI_TEMPLATES[industryKey];
     const templateConfig = await getVAPITemplate(templateId);
     
-    // Create assistant
+    // Create VAPI assistant
     console.log('🛠️ Creating assistant...');
     const assistant = await createVAPIAssistant(templateConfig, business_name);
     console.log('✅ Assistant:', assistant.id);
     
-    // Provision phone
+    // Provision phone with custom area code
     console.log('📞 Provisioning phone...');
-    const vapiPhone = await provisionVAPIPhone(assistant.id);
+    const vapiPhone = await provisionVAPIPhone(assistant.id, validatedAreaCode);
     console.log('✅ Phone:', vapiPhone);
     
-    // Create account
+    // Create Supabase account
     console.log('💾 Creating Supabase account...');
     const trialEndsAt = new Date();
     trialEndsAt.setDate(trialEndsAt.getDate() + 7);
@@ -195,20 +231,24 @@ async function handleGHLSignup(req, res) {
     
     console.log('✅ Account created:', newClient.id);
     
-    // Send email
+    // Send welcome email
     await sendWelcomeEmail(email, first_name, business_name, vapiPhone);
     
-    console.log('🎉 Complete!');
+    console.log('🎉 Onboarding complete!');
     return res.status(200).json({
       success: true,
       client_id: newClient.id,
       vapi_phone: vapiPhone,
+      area_code: validatedAreaCode,
       trial_ends_at: trialEndsAt
     });
     
   } catch (error) {
     console.error('❌ Error:', error);
-    return res.status(500).json({ error: 'Internal error', message: error.message });
+    return res.status(500).json({ 
+      error: 'Internal error', 
+      message: error.message 
+    });
   }
 }
 
