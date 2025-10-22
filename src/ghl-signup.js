@@ -1,102 +1,134 @@
 const { createClient } = require('@supabase/supabase-js');
 const fetch = require('node-fetch');
-const crypto = require('crypto');
 
-// Initialize Supabase with SERVICE KEY
 const supabase = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_SERVICE_KEY
 );
 
-// VAPI Template IDs by industry
-const VAPI_TEMPLATES = {
-  'home_services': '6f10579e-1a4d-4ad2-bbb0-8d4acb577569',
-  'medical': '1c0ace33-8229-4af4-9be8-d2beb955fa82',
-  'retail': '0b78f485-d860-401c-abc5-4283510fe19c',
-  'professional_services': '8c6b9048-c6f8-40e0-879f-58e060780b7e',
-  'restaurants': '360775b7-9573-45a7-9789-595b8acf25d9'
-};
+// Industry-specific templates
+const industryTemplates = {
+  plumbing: {
+    firstMessage: "Thanks for calling! I'm here to help with your plumbing needs. Could you tell me your name and what you need help with today?",
+    voice: { provider: 'azure', voiceId: 'andrew' },
+    transcriber: { provider: 'deepgram', model: 'nova-2' },
+    model: {
+      provider: 'openai',
+      model: 'gpt-4',
+      temperature: 0.7,
+      systemPrompt: `You are a professional plumbing receptionist. Be friendly and helpful. Ask for:
+1. Customer's name
+2. Type of plumbing issue (drain, leak, water heater, etc.)
+3. Urgency level (emergency or can wait)
+4. Best callback number
+5. If they want to schedule an appointment
 
-// Map GHL industry strings to template keys
-const INDUSTRY_MAP = {
-  'Home Services (plumbing, HVAC, contractors)': 'home_services',
-  'Medical/Dental': 'medical',
-  'Retail/E-commerce': 'retail',
-  'Professional Services (legal, accounting)': 'professional_services',
-  'Restaurants/Food Service': 'restaurants'
-};
-
-// Format phone number to E.164 standard (+1XXXXXXXXXX)
-function formatPhoneE164(phone) {
-  const digits = phone.replace(/\D/g, '');
-  if (digits.length === 10) return `+1${digits}`;
-  if (digits.length === 11 && digits[0] === '1') return `+${digits}`;
-  return `+${digits}`;
-}
-
-// Validate and clean area code (must be 3 digits)
-function validateAreaCode(areaCode) {
-  if (!areaCode) return '404';
-  const cleaned = String(areaCode).replace(/\D/g, '');
-  if (cleaned.length === 3) return cleaned;
-  return '404';
-}
-
-// Generate secure random token for password reset
-function generatePasswordToken() {
-  return crypto.randomBytes(32).toString('hex');
-}
-
-// Store password reset token in database
-async function createPasswordToken(userId, email) {
-  const token = generatePasswordToken();
-  const expiresAt = new Date();
-  expiresAt.setHours(expiresAt.getHours() + 24); // Expires in 24 hours
-  
-  const { data, error } = await supabase
-    .from('password_reset_tokens')
-    .insert({
-      user_id: userId,
-      email: email,
-      token: token,
-      expires_at: expiresAt.toISOString(),
-      used: false
-    })
-    .select()
-    .single();
-  
-  if (error) {
-    console.error('❌ Error creating password token:', error);
-    throw new Error('Failed to create password token');
-  }
-  
-  return token;
-}
-
-// Fetch VAPI assistant template configuration
-async function getVAPITemplate(templateId) {
-  const response = await fetch(`https://api.vapi.ai/assistant/${templateId}`, {
-    method: 'GET',
-    headers: {
-      'Authorization': `Bearer ${process.env.VAPI_API_KEY}`,
-      'Content-Type': 'application/json'
+Keep responses concise and professional.`
     }
-  });
+  },
+  hvac: {
+    firstMessage: "Thanks for calling! I'm here to help with your heating and cooling needs. Could you tell me your name and what you need help with?",
+    voice: { provider: 'azure', voiceId: 'andrew' },
+    transcriber: { provider: 'deepgram', model: 'nova-2' },
+    model: {
+      provider: 'openai',
+      model: 'gpt-4',
+      temperature: 0.7,
+      systemPrompt: `You are a professional HVAC receptionist. Be friendly and helpful. Ask for:
+1. Customer's name
+2. Type of HVAC issue (AC, heating, maintenance)
+3. Urgency level
+4. Best callback number
+5. If they want to schedule an appointment
+
+Keep responses concise and professional.`
+    }
+  },
+  electrical: {
+    firstMessage: "Thanks for calling! I'm here to help with your electrical needs. Could you tell me your name and what you need help with today?",
+    voice: { provider: 'azure', voiceId: 'andrew' },
+    transcriber: { provider: 'deepgram', model: 'nova-2' },
+    model: {
+      provider: 'openai',
+      model: 'gpt-4',
+      temperature: 0.7,
+      systemPrompt: `You are a professional electrical service receptionist. Be friendly and helpful. Ask for:
+1. Customer's name
+2. Type of electrical issue
+3. Safety concerns or urgency
+4. Best callback number
+5. If they want to schedule an appointment
+
+Keep responses concise and professional.`
+    }
+  },
+  roofing: {
+    firstMessage: "Thanks for calling! I'm here to help with your roofing needs. Could you tell me your name and what you're looking for?",
+    voice: { provider: 'azure', voiceId: 'andrew' },
+    transcriber: { provider: 'deepgram', model: 'nova-2' },
+    model: {
+      provider: 'openai',
+      model: 'gpt-4',
+      temperature: 0.7,
+      systemPrompt: `You are a professional roofing company receptionist. Be friendly and helpful. Ask for:
+1. Customer's name
+2. Type of roofing service (repair, replacement, inspection)
+3. Urgency level
+4. Best callback number
+5. If they want to schedule an estimate
+
+Keep responses concise and professional.`
+    }
+  },
+  general: {
+    firstMessage: "Thanks for calling! I'm here to help. Could you tell me your name and how I can assist you today?",
+    voice: { provider: 'azure', voiceId: 'andrew' },
+    transcriber: { provider: 'deepgram', model: 'nova-2' },
+    model: {
+      provider: 'openai',
+      model: 'gpt-4',
+      temperature: 0.7,
+      systemPrompt: `You are a professional business receptionist. Be friendly and helpful. Ask for:
+1. Customer's name
+2. What they need help with
+3. Urgency level
+4. Best callback number
+5. If they want to schedule an appointment
+
+Keep responses concise and professional.`
+    }
+  }
+};
+
+// Validate area code (US only)
+function validateAreaCode(areaCode) {
+  // Remove any non-digits
+  const cleaned = String(areaCode).replace(/\D/g, '');
   
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`Failed to get VAPI template: ${errorText}`);
+  // Must be exactly 3 digits
+  if (cleaned.length !== 3) {
+    console.log(`⚠️ Invalid area code length: ${areaCode}, using default 404`);
+    return '404';
   }
   
-  return await response.json();
+  // First digit can't be 0 or 1
+  if (cleaned[0] === '0' || cleaned[0] === '1') {
+    console.log(`⚠️ Invalid area code format: ${areaCode}, using default 404`);
+    return '404';
+  }
+  
+  return cleaned;
 }
 
-// Create customized VAPI assistant from template
-async function createVAPIAssistant(templateConfig, businessName) {
-  // Customize the system prompt with business details
-  const customizedPrompt = templateConfig.model.messages[0].content
-    .replace('{{business_name}}', businessName)
-    .replace('{{business_hours}}', 'Monday-Friday 9am-5pm');
+// Create VAPI assistant
+async function createVAPIAssistant(businessName, industry) {
+  const templateConfig = industryTemplates[industry] || industryTemplates.general;
+  
+  // Customize prompt with business name
+  const customizedPrompt = templateConfig.model.systemPrompt.replace(
+    'professional',
+    `professional ${businessName}`
+  );
   
   const newAssistant = {
     name: `${businessName} Assistant`,
@@ -108,7 +140,52 @@ async function createVAPIAssistant(templateConfig, businessName) {
     voice: templateConfig.voice,
     transcriber: templateConfig.transcriber,
     serverUrl: process.env.VAPI_WEBHOOK_URL,
-    serverUrlSecret: process.env.VAPI_WEBHOOK_SECRET
+    serverUrlSecret: process.env.VAPI_WEBHOOK_SECRET,
+    // ✨ STRUCTURED DATA EXTRACTION
+    analysisPlan: {
+      structuredDataPlan: {
+        enabled: true,
+        schema: {
+          type: "object",
+          properties: {
+            customerName: {
+              type: "string",
+              description: "Customer's full name"
+            },
+            customerPhone: {
+              type: "string",
+              description: "Customer's phone number if provided"
+            },
+            urgency: {
+              type: "string",
+              enum: ["HIGH", "MEDIUM", "NORMAL"],
+              description: "Urgency level of the request"
+            },
+            serviceType: {
+              type: "string",
+              description: "Type of service they need"
+            },
+            appointmentRequested: {
+              type: "boolean",
+              description: "Whether they requested an appointment"
+            }
+          },
+          required: ["customerName", "urgency"]
+        },
+        messages: [{
+          role: "system",
+          content: `Extract the following information from the call transcript:
+- Customer's full name (look for "my name is", "this is", "I'm" followed by their name)
+- Customer's phone number if they provided it (in any format)
+- Type of service they need (be specific: "drain cleaning", "water heater repair", etc.)
+- Urgency level (emergency, urgent, routine, or inquiry)
+- Whether they requested an appointment
+
+Only extract information that was clearly stated. If not mentioned, leave blank.`
+        }],
+        timeoutSeconds: 30
+      }
+    }
   };
   
   const response = await fetch('https://api.vapi.ai/assistant', {
@@ -143,7 +220,8 @@ async function provisionVAPIPhone(assistantId, areaCode) {
     body: JSON.stringify({
       areaCode: validAreaCode,
       name: `Assistant Phone`,
-      assistantId: assistantId
+      assistantId: assistantId,
+      serverUrl: process.env.VAPI_WEBHOOK_URL
     })
   });
   
@@ -204,82 +282,51 @@ async function sendWelcomeEmail(email, firstName, businessName, vapiPhone, token
               </p>
               
               <p style="margin: 0 0 20px; color: #333333; font-size: 16px; line-height: 1.6;">
-                Your CallBird account for <strong>${businessName}</strong> is ready and your AI assistant is live!
+                Your CallBird AI phone system for <strong>${businessName}</strong> is ready to start taking calls!
               </p>
               
               <!-- Phone Number Box -->
-              <table width="100%" cellpadding="0" cellspacing="0" style="margin: 20px 0; background-color: #E8EAF6; border-radius: 6px;">
-                <tr>
-                  <td style="padding: 20px; text-align: center;">
-                    <div style="color: #666666; font-size: 14px; margin-bottom: 5px;">Your AI Assistant Phone Number</div>
-                    <div style="color: #111D96; font-size: 24px; font-weight: 600;">${vapiPhone}</div>
-                  </td>
-                </tr>
-              </table>
+              <div style="background-color: #E8EAF6; border-left: 4px solid #111D96; padding: 20px; margin: 30px 0; border-radius: 4px;">
+                <p style="margin: 0 0 10px; color: #666666; font-size: 14px; font-weight: 600;">YOUR AI PHONE NUMBER</p>
+                <p style="margin: 0; color: #111D96; font-size: 24px; font-weight: 700;">${vapiPhone}</p>
+              </div>
               
-              <p style="margin: 20px 0; color: #333333; font-size: 16px; line-height: 1.6;">
-                <strong>Next Step:</strong> Set your password to access your dashboard and view call transcripts.
+              <p style="margin: 0 0 30px; color: #333333; font-size: 16px; line-height: 1.6;">
+                To access your dashboard and view incoming calls, please set your password:
               </p>
               
               <!-- CTA Button -->
-              <table width="100%" cellpadding="0" cellspacing="0" style="margin: 30px 0;">
+              <table width="100%" cellpadding="0" cellspacing="0">
                 <tr>
                   <td align="center">
-                    <a href="${setPasswordUrl}" style="display: inline-block; padding: 16px 40px; background-color: #F8B828; color: #000000; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 16px;">
-                      Set Your Password →
+                    <a href="${setPasswordUrl}" style="display: inline-block; padding: 16px 40px; background-color: #F8B828; color: #111D96; text-decoration: none; font-size: 16px; font-weight: 600; border-radius: 6px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+                      Set Your Password
                     </a>
                   </td>
                 </tr>
               </table>
               
-              <p style="margin: 20px 0 10px; color: #666666; font-size: 14px; text-align: center;">
-                This link expires in 24 hours
-              </p>
-              
-              <!-- Features Box -->
-              <table width="100%" cellpadding="0" cellspacing="0" style="margin: 30px 0; border-top: 2px solid #E8EAF6; padding-top: 30px;">
-                <tr>
-                  <td>
-                    <p style="margin: 0 0 15px; color: #111D96; font-size: 16px; font-weight: 600;">What you can do in your dashboard:</p>
-                    <ul style="margin: 0; padding-left: 20px; color: #333333; font-size: 15px; line-height: 1.8;">
-                      <li>View all call transcripts in real-time</li>
-                      <li>See AI summaries of customer requests</li>
-                      <li>Manage your business settings</li>
-                      <li>Track urgent calls and appointments</li>
-                    </ul>
-                  </td>
-                </tr>
-              </table>
-              
-              <!-- Trial Notice -->
-              <table width="100%" cellpadding="0" cellspacing="0" style="margin: 30px 0;">
-                <tr>
-                  <td style="background-color: #FFF9E6; padding: 20px; border-radius: 6px; border-left: 4px solid #F8B828;">
-                    <p style="margin: 0; color: #333333; font-size: 14px; line-height: 1.6;">
-                      <strong>Your 7-day free trial starts now!</strong><br>
-                      No credit card required. Cancel anytime.
-                    </p>
-                  </td>
-                </tr>
-              </table>
-              
               <p style="margin: 30px 0 0; color: #666666; font-size: 14px; line-height: 1.6;">
-                Questions? Just reply to this email - we're here to help!
-              </p>
-              
-              <p style="margin: 20px 0 0; color: #333333; font-size: 16px;">
-                Welcome aboard! 🚀<br>
-                <span style="color: #666666; font-size: 14px;">The CallBird Team</span>
+                This link will expire in 24 hours for security purposes.
               </p>
             </td>
           </tr>
           
           <!-- Footer -->
           <tr>
-            <td style="padding: 30px; text-align: center; background-color: #FAFAF8; border-radius: 0 0 8px 8px;">
+            <td style="padding: 30px 40px; background-color: #FAFAF8; border-radius: 0 0 8px 8px; border-top: 1px solid #E8EAF6;">
+              <p style="margin: 0 0 10px; color: #666666; font-size: 14px; line-height: 1.6;">
+                <strong>What's Next?</strong>
+              </p>
+              <p style="margin: 0 0 20px; color: #666666; font-size: 14px; line-height: 1.6;">
+                • Set your password and log in to your dashboard<br>
+                • Test your AI phone number<br>
+                • View real-time call transcripts<br>
+                • Get instant notifications for new calls
+              </p>
+              
               <p style="margin: 0; color: #999999; font-size: 12px;">
-                CallBird - AI-Powered Call Management<br>
-                <a href="https://callbirdai.com" style="color: #111D96; text-decoration: none;">callbirdai.com</a>
+                Questions? Reply to this email or visit our support center.
               </p>
             </td>
           </tr>
@@ -293,200 +340,173 @@ async function sendWelcomeEmail(email, firstName, businessName, vapiPhone, token
         `
       })
     });
-    
+
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('❌ Failed to send email:', errorText);
-      throw new Error(`Email failed: ${errorText}`);
+      throw new Error(`Resend API error: ${errorText}`);
     }
-    
-    const result = await response.json();
-    console.log(`✅ Email sent successfully to ${email} (Resend ID: ${result.id})`);
-    
+
+    const data = await response.json();
+    console.log('✅ Email sent successfully:', data.id);
+    return true;
+
   } catch (error) {
-    console.error('❌ Email error:', error);
-    // Don't throw - we don't want email failure to block account creation
-    // User can still use "forgot password" flow if email fails
+    console.error('❌ Failed to send email:', error.message);
+    return false;
   }
 }
 
-// Main webhook handler for GHL signups
+// Main GHL webhook handler
 async function handleGHLSignup(req, res) {
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' });
-  }
-  
-  console.log('📥 GHL Webhook received:', req.body);
-  
   try {
-    // Extract and validate required fields from webhook
-    const { email, first_name, phone, business_name, industry, area_code } = req.body;
-    
-    if (!email || !first_name || !phone || !business_name || !industry) {
-      console.error('❌ Missing required fields');
-      return res.status(400).json({ 
-        error: 'Missing required fields',
-        received: req.body
-      });
-    }
-    
-    // Format and validate data
-    const formattedPhone = formatPhoneE164(phone);
-    const industryKey = INDUSTRY_MAP[industry];
-    
-    if (!industryKey) {
-      console.error('❌ Invalid industry:', industry);
-      return res.status(400).json({ 
-        error: 'Invalid industry',
-        received: industry,
-        valid_options: Object.keys(INDUSTRY_MAP)
-      });
-    }
-    
-    const validatedAreaCode = validateAreaCode(area_code);
-    
-    console.log('✅ Data validated:', { 
-      email, 
-      first_name, 
-      formattedPhone, 
-      business_name, 
-      industryKey,
-      area_code: validatedAreaCode 
-    });
-    
-    // CRITICAL: Check for duplicates FIRST before creating any expensive resources
-    console.log('🔍 Checking for existing accounts...');
-    
-    const { data: existingUser, error: userCheckError } = await supabase
-      .from('users')
-      .select('id, client_id')
-      .eq('email', email)
-      .single();
-    
-    if (existingUser) {
-      console.log('⚠️ User already exists:', email);
-      return res.status(200).json({ 
+    console.log('🎯 GHL webhook received');
+    console.log('Request body:', JSON.stringify(req.body, null, 2));
+
+    const {
+      firstName,
+      lastName,
+      email,
+      phone,
+      businessName,
+      industry,
+      areaCode
+    } = req.body;
+
+    // Validation
+    if (!email || !businessName) {
+      return res.status(400).json({
         success: false,
-        message: 'An account already exists for this email address',
-        user_id: existingUser.id,
-        client_id: existingUser.client_id
+        error: 'Missing required fields: email and businessName'
       });
     }
-    
-    const { data: existingClient, error: clientCheckError } = await supabase
+
+    console.log(`📋 Processing signup for: ${businessName} (${email})`);
+
+    // ✅ DUPLICATE CHECK FIRST (before creating any resources)
+    const { data: existingClient, error: checkError } = await supabase
       .from('clients')
-      .select('id, business_name')
+      .select('id, business_name, email')
       .eq('email', email)
       .single();
-    
+
     if (existingClient) {
-      console.log('⚠️ Client already exists:', email);
-      return res.status(200).json({ 
-        success: false,
-        message: 'A business account already exists for this email address',
-        client_id: existingClient.id,
-        business_name: existingClient.business_name
+      console.log('⚠️ Client already exists:', existingClient.business_name);
+      return res.status(200).json({
+        success: true,
+        message: 'Client already exists',
+        clientId: existingClient.id,
+        duplicate: true
       });
     }
-    
-    console.log('✅ No duplicates found - proceeding with account creation');
-    
-    // Get VAPI assistant template for the industry
-    console.log(`🤖 Fetching VAPI template for industry: ${industryKey}`);
-    const templateId = VAPI_TEMPLATES[industryKey];
-    const templateConfig = await getVAPITemplate(templateId);
-    console.log('✅ Template fetched');
-    
-    // Create customized VAPI assistant
-    console.log('🛠️ Creating VAPI assistant...');
-    const assistant = await createVAPIAssistant(templateConfig, business_name);
+
+    // 1. Create VAPI Assistant
+    console.log('🤖 Creating VAPI assistant...');
+    const assistant = await createVAPIAssistant(businessName, industry);
     console.log(`✅ Assistant created: ${assistant.id}`);
-    
-    // Purchase phone number and link to assistant
+
+    // 2. Purchase Phone Number
     console.log('📞 Provisioning phone number...');
-    const vapiPhone = await provisionVAPIPhone(assistant.id, validatedAreaCode);
-    console.log(`✅ Phone provisioned: ${vapiPhone}`);
-    
-    // Create client record in Supabase
-    console.log('💾 Creating client record in database...');
-    const trialEndsAt = new Date();
-    trialEndsAt.setDate(trialEndsAt.getDate() + 7); // 7-day trial
-    
+    const phoneNumber = await provisionVAPIPhone(assistant.id, areaCode);
+
+    // 3. Create Client in Supabase
+    console.log('💾 Creating client record...');
     const { data: newClient, error: clientError } = await supabase
       .from('clients')
-      .insert({
+      .insert([{
+        business_name: businessName,
         email: email,
-        business_name: business_name,
-        industry: industryKey,
-        phone_number: formattedPhone,
-        owner_name: first_name,
-        owner_phone: formattedPhone,
+        owner_phone: phone,
+        industry: industry || 'general',
         vapi_assistant_id: assistant.id,
-        vapi_phone_number: vapiPhone,
-        status: 'trial',
-        trial_ends_at: trialEndsAt.toISOString(),
-        onboarding_completed: false,
-        onboarding_step: 1
-      })
+        vapi_phone_number: phoneNumber,
+        created_at: new Date().toISOString()
+      }])
       .select()
       .single();
-    
+
     if (clientError) {
       console.error('❌ Failed to create client:', clientError);
-      throw new Error(`Database error creating client: ${clientError.message}`);
+      throw clientError;
     }
-    
+
     console.log(`✅ Client created: ${newClient.id}`);
-    
-    // Create user record (for authentication)
-    console.log('👤 Creating user record...');
+
+    // 4. Create User Account
+    console.log('👤 Creating user account...');
     const { data: newUser, error: userError } = await supabase
       .from('users')
-      .insert({
+      .insert([{
         email: email,
-        password_hash: null, // Will be set when user clicks password setup link
-        first_name: first_name,
         client_id: newClient.id,
         created_at: new Date().toISOString()
-      })
+      }])
       .select()
       .single();
-    
+
     if (userError) {
       console.error('❌ Failed to create user:', userError);
-      throw new Error(`Database error creating user: ${userError.message}`);
+      throw userError;
     }
-    
+
     console.log(`✅ User created: ${newUser.id}`);
-    
-    // Generate password setup token
-    console.log('🔐 Generating password setup token...');
-    const token = await createPasswordToken(newUser.id, email);
-    console.log('✅ Token generated');
-    
-    // Send welcome email with password setup link
+
+    // 5. Generate Password Reset Token
+    const token = require('crypto').randomBytes(32).toString('hex');
+    const expiresAt = new Date();
+    expiresAt.setHours(expiresAt.getHours() + 24);
+
+    const { error: tokenError } = await supabase
+      .from('password_reset_tokens')
+      .insert([{
+        user_id: newUser.id,
+        email: email,
+        token: token,
+        expires_at: expiresAt.toISOString(),
+        used: false,
+        created_at: new Date().toISOString()
+      }]);
+
+    if (tokenError) {
+      console.error('❌ Failed to create token:', tokenError);
+      throw tokenError;
+    }
+
+    console.log('✅ Password reset token generated');
+
+    // 6. Send Welcome Email
     console.log('📧 Sending welcome email...');
-    await sendWelcomeEmail(email, first_name, business_name, vapiPhone, token);
-    
-    console.log('🎉 Account creation complete!');
-    
+    const emailSent = await sendWelcomeEmail(
+      email,
+      firstName || 'there',
+      businessName,
+      phoneNumber,
+      token
+    );
+
+    if (emailSent) {
+      console.log('✅ Welcome email sent successfully');
+    } else {
+      console.log('⚠️ Welcome email failed to send');
+    }
+
+    // Success response
     return res.status(200).json({
       success: true,
-      client_id: newClient.id,
-      user_id: newUser.id,
-      vapi_assistant_id: assistant.id,
-      vapi_phone: vapiPhone,
-      area_code: validatedAreaCode,
-      trial_ends_at: trialEndsAt.toISOString(),
-      message: 'Account created successfully. Welcome email sent to customer.'
+      message: 'Client onboarding complete',
+      data: {
+        clientId: newClient.id,
+        userId: newUser.id,
+        assistantId: assistant.id,
+        phoneNumber: phoneNumber,
+        emailSent: emailSent
+      }
     });
-    
+
   } catch (error) {
-    console.error('❌ Webhook error:', error);
-    return res.status(500).json({ 
+    console.error('❌ GHL webhook error:', error);
+    return res.status(500).json({
       success: false,
-      error: 'Internal server error', 
-      message: error.message 
+      error: error.message
     });
   }
 }
