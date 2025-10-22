@@ -3,7 +3,7 @@ const axios = require('axios');
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
-  process.env.SUPABASE_KEY
+  process.env.SUPABASE_SERVICE_KEY
 );
 
 // Get VAPI phone number from phoneNumberId
