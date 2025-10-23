@@ -6,6 +6,35 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_KEY
 );
 
+// Helper: Format phone number to E.164 format for Telnyx
+function formatPhoneE164(phone) {
+  if (!phone) return null;
+  
+  // Remove all non-digit characters
+  const digits = phone.replace(/\D/g, '');
+  
+  // Handle different lengths
+  if (digits.length === 11 && digits.startsWith('1')) {
+    return `+${digits}`;
+  }
+  
+  if (digits.length === 10) {
+    return `+1${digits}`;
+  }
+  
+  if (digits.length === 11) {
+    return `+${digits}`;
+  }
+  
+  // If already formatted correctly
+  if (phone.startsWith('+') && phone.replace(/\D/g, '').length >= 10) {
+    return phone.replace(/[^\d+]/g, '');
+  }
+  
+  console.log(`⚠️ Invalid phone format: ${phone}`);
+  return null;
+}
+
 // Get VAPI phone number from phoneNumberId
 async function getPhoneNumberFromVapi(phoneNumberId) {
   try {
@@ -314,33 +343,42 @@ async function handleVapiWebhook(req, res) {
       
       console.log('✅ Call saved successfully');
 
-      // Send SMS notification via Telnyx
+      // ✨ FIXED: Send SMS notification via Telnyx with proper phone formatting
       if (client.owner_phone) {
         console.log('📱 Preparing SMS notification...');
         
-        // Build SMS message (works for any industry)
-        let smsMessage = `🔔 New Call - ${client.business_name}\n\n`;
+        // Format phone number to E.164
+        const formattedPhone = formatPhoneE164(client.owner_phone);
         
-        smsMessage += `Customer: ${customerName}\n`;
-        smsMessage += `Phone: ${customerPhone}\n`;
-        
-        if (customerEmail) {
-          smsMessage += `Email: ${customerEmail}\n`;
-        }
-        
-        if (urgency === 'HIGH') {
-          smsMessage += `⚠️ Urgency: HIGH\n`;
-        }
-        
-        smsMessage += `\nSummary: ${aiSummary}\n\n`;
-        smsMessage += `View full transcript in your CallBird dashboard.`;
-
-        const smsSent = await sendTelnyxSMS(client.owner_phone, smsMessage);
-        
-        if (smsSent) {
-          console.log('✅ SMS notification sent to:', client.owner_phone);
+        if (!formattedPhone) {
+          console.log('⚠️ Could not format owner phone number:', client.owner_phone);
         } else {
-          console.log('⚠️ SMS notification failed');
+          console.log('📱 Formatted phone:', formattedPhone);
+          
+          // Build SMS message (works for any industry)
+          let smsMessage = `🔔 New Call - ${client.business_name}\n\n`;
+          
+          smsMessage += `Customer: ${customerName}\n`;
+          smsMessage += `Phone: ${customerPhone}\n`;
+          
+          if (customerEmail) {
+            smsMessage += `Email: ${customerEmail}\n`;
+          }
+          
+          if (urgency === 'HIGH') {
+            smsMessage += `⚠️ Urgency: HIGH\n`;
+          }
+          
+          smsMessage += `\nSummary: ${aiSummary}\n\n`;
+          smsMessage += `View full transcript in your CallBird dashboard.`;
+
+          const smsSent = await sendTelnyxSMS(formattedPhone, smsMessage);
+          
+          if (smsSent) {
+            console.log('✅ SMS notification sent to:', formattedPhone);
+          } else {
+            console.log('⚠️ SMS notification failed');
+          }
         }
       } else {
         console.log('⚠️ No owner_phone configured for this client');
