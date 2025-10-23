@@ -517,6 +517,8 @@ async function handleGHLSignup(req, res) {
       .from('users')
       .insert([{
         email: email,
+        first_name: firstName || 'User',  // ✨ FIXED: Added first_name
+        last_name: lastName || '',         // ✨ FIXED: Added last_name
         client_id: newClient.id,
         created_at: new Date().toISOString()
       }])
