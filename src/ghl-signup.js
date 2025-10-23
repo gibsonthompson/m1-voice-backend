@@ -1,5 +1,6 @@
 const { createClient } = require('@supabase/supabase-js');
 const fetch = require('node-fetch');
+const { createKnowledgeBaseFromWebsite } = require('./website-scraper');
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
@@ -100,28 +101,28 @@ Keep responses concise and professional.`
   }
 };
 
-// Validate area code (US only)
+// Validate area code (US only) with multiple fallbacks
 function validateAreaCode(areaCode) {
   // Remove any non-digits
   const cleaned = String(areaCode).replace(/\D/g, '');
   
   // Must be exactly 3 digits
   if (cleaned.length !== 3) {
-    console.log(`⚠️ Invalid area code length: ${areaCode}, using default 404`);
+    console.log(`⚠️ Invalid area code length: ${areaCode}, will try common codes`);
     return '404';
   }
   
   // First digit can't be 0 or 1
   if (cleaned[0] === '0' || cleaned[0] === '1') {
-    console.log(`⚠️ Invalid area code format: ${areaCode}, using default 404`);
+    console.log(`⚠️ Invalid area code format: ${areaCode}, will try common codes`);
     return '404';
   }
   
   return cleaned;
 }
 
-// Create VAPI assistant
-async function createVAPIAssistant(businessName, industry) {
+// Create VAPI assistant with optional knowledge base
+async function createVAPIAssistant(businessName, industry, websiteUrl) {
   const templateConfig = industryTemplates[industry] || industryTemplates.general;
   
   // Customize prompt with business name
@@ -130,18 +131,45 @@ async function createVAPIAssistant(businessName, industry) {
     `professional ${businessName}`
   );
   
+  // Create knowledge base from website if provided
+  let knowledgeBaseId = null;
+  if (websiteUrl && websiteUrl.trim().length > 0) {
+    console.log('🌐 Website URL provided, creating knowledge base...');
+    knowledgeBaseId = await createKnowledgeBaseFromWebsite(
+      websiteUrl,
+      businessName,
+      process.env.VAPI_API_KEY,
+      process.env.JINA_API_KEY // Optional, can be null
+    );
+    
+    if (knowledgeBaseId) {
+      console.log(`✅ Knowledge base ready: ${knowledgeBaseId}`);
+    } else {
+      console.log('⚠️ Knowledge base creation failed, continuing without it');
+    }
+  } else {
+    console.log('ℹ️ No website URL provided, skipping knowledge base');
+  }
+  
+  // Build assistant configuration
   const newAssistant = {
     name: `${businessName} Assistant`,
     firstMessage: templateConfig.firstMessage,
     model: {
       ...templateConfig.model,
-      messages: [{ role: 'system', content: customizedPrompt }]
+      knowledgeBaseId: knowledgeBaseId, // Link knowledge base if created
+      messages: [{ 
+        role: 'system', 
+        content: knowledgeBaseId 
+          ? `${customizedPrompt}\n\nWhen customers ask about ${businessName}'s services, pricing, location, or company information, use the knowledge base to provide accurate details from their website.`
+          : customizedPrompt
+      }]
     },
     voice: templateConfig.voice,
     transcriber: templateConfig.transcriber,
     serverUrl: process.env.VAPI_WEBHOOK_URL,
     serverUrlSecret: process.env.VAPI_WEBHOOK_SECRET,
-    // ✨ STRUCTURED DATA EXTRACTION
+    // Structured data extraction
     analysisPlan: {
       structuredDataPlan: {
         enabled: true,
@@ -205,34 +233,81 @@ Only extract information that was clearly stated. If not mentioned, leave blank.
   return await response.json();
 }
 
-// Purchase VAPI phone number with specified area code
+// Purchase VAPI phone number with fallback to suggested area codes
 async function provisionVAPIPhone(assistantId, areaCode) {
   const validAreaCode = validateAreaCode(areaCode);
   
-  console.log(`📞 Purchasing phone number with area code: ${validAreaCode}`);
+  console.log(`📞 Attempting to purchase phone number with area code: ${validAreaCode}`);
   
-  const buyResponse = await fetch('https://api.vapi.ai/phone-number/buy', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${process.env.VAPI_API_KEY}`,
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({
-      areaCode: validAreaCode,
-      name: `Assistant Phone`,
-      assistantId: assistantId,
-      serverUrl: process.env.VAPI_WEBHOOK_URL
-    })
-  });
+  // Try requested area code first
+  let lastError = null;
+  const attemptedCodes = [validAreaCode];
   
-  if (!buyResponse.ok) {
-    const errorText = await buyResponse.text();
-    throw new Error(`Failed to buy phone number: ${errorText}`);
+  for (const code of attemptedCodes) {
+    try {
+      const buyResponse = await fetch('https://api.vapi.ai/phone-number/buy', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${process.env.VAPI_API_KEY}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          areaCode: code,
+          name: `Assistant Phone`,
+          assistantId: assistantId,
+          serverUrl: process.env.VAPI_WEBHOOK_URL
+        })
+      });
+      
+      if (buyResponse.ok) {
+        const phoneData = await buyResponse.json();
+        console.log(`✅ Phone number purchased: ${phoneData.number}`);
+        
+        // Log if we had to use a fallback
+        if (code !== validAreaCode) {
+          console.log(`ℹ️ Used fallback area code ${code} (requested: ${validAreaCode})`);
+        }
+        
+        return phoneData.number;
+      }
+      
+      // Parse error response
+      const errorData = await buyResponse.json();
+      lastError = errorData;
+      
+      console.log(`⚠️ Area code ${code} unavailable`);
+      
+      // Check if VAPI suggested alternative area codes
+      if (errorData.message && errorData.message.includes('Try one of')) {
+        const suggestedMatch = errorData.message.match(/Try one of ([\d, ]+)/);
+        if (suggestedMatch) {
+          const suggestedCodes = suggestedMatch[1]
+            .split(',')
+            .map(c => c.trim())
+            .filter(c => c.length === 3);
+          
+          console.log(`💡 VAPI suggests trying: ${suggestedCodes.join(', ')}`);
+          
+          // Add suggested codes to attempt list (if not already tried)
+          for (const suggested of suggestedCodes) {
+            if (!attemptedCodes.includes(suggested)) {
+              attemptedCodes.push(suggested);
+            }
+          }
+        }
+      }
+      
+    } catch (error) {
+      console.error(`❌ Error attempting area code ${code}:`, error.message);
+      lastError = error;
+    }
   }
   
-  const phoneData = await buyResponse.json();
-  console.log(`✅ Phone number purchased: ${phoneData.number}`);
-  return phoneData.number;
+  // If we've exhausted all attempts, throw error
+  throw new Error(
+    `Failed to purchase phone number. Attempted area codes: ${attemptedCodes.join(', ')}. ` +
+    `Last error: ${lastError?.message || JSON.stringify(lastError)}`
+  );
 }
 
 // Send welcome email with password setup link via Resend
@@ -369,7 +444,8 @@ async function handleGHLSignup(req, res) {
       phone,
       businessName,
       industry,
-      areaCode
+      areaCode,
+      websiteUrl
     } = req.body;
 
     // Validation
@@ -381,6 +457,9 @@ async function handleGHLSignup(req, res) {
     }
 
     console.log(`📋 Processing signup for: ${businessName} (${email})`);
+    if (websiteUrl) {
+      console.log(`🌐 Website: ${websiteUrl}`);
+    }
 
     // ✅ DUPLICATE CHECK FIRST (before creating any resources)
     const { data: existingClient, error: checkError } = await supabase
@@ -399,9 +478,9 @@ async function handleGHLSignup(req, res) {
       });
     }
 
-    // 1. Create VAPI Assistant
+    // 1. Create VAPI Assistant (with knowledge base if website provided)
     console.log('🤖 Creating VAPI assistant...');
-    const assistant = await createVAPIAssistant(businessName, industry);
+    const assistant = await createVAPIAssistant(businessName, industry, websiteUrl);
     console.log(`✅ Assistant created: ${assistant.id}`);
 
     // 2. Purchase Phone Number
@@ -419,6 +498,7 @@ async function handleGHLSignup(req, res) {
         industry: industry || 'general',
         vapi_assistant_id: assistant.id,
         vapi_phone_number: phoneNumber,
+        website_url: websiteUrl || null,
         created_at: new Date().toISOString()
       }])
       .select()
@@ -498,6 +578,8 @@ async function handleGHLSignup(req, res) {
         userId: newUser.id,
         assistantId: assistant.id,
         phoneNumber: phoneNumber,
+        websiteUrl: websiteUrl || null,
+        knowledgeBaseCreated: !!assistant.model?.knowledgeBaseId,
         emailSent: emailSent
       }
     });
