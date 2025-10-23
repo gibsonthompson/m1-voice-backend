@@ -1,6 +1,6 @@
 const express = require('express');
 const { createClient } = require('@supabase/supabase-js');
-const { handleVAPIWebhook } = require('./webhooks');  // ✨ Fixed capitalization
+const { handleVapiWebhook } = require('./webhooks');  // ✨ FIXED: Original case
 const { handleGHLSignup } = require('./ghl-signup');
 
 const app = express();
@@ -12,7 +12,7 @@ app.use(express.urlencoded({ limit: '10mb', extended: true }));
 // Supabase client
 const supabase = createClient(
   process.env.SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_KEY  // ✨ Use service key for backend
+  process.env.SUPABASE_SERVICE_KEY
 );
 
 // Root route
@@ -24,7 +24,7 @@ app.get('/', (req, res) => {
     endpoints: {
       health: '/health',
       detailedHealth: '/health/detailed',
-      vapiWebhook: '/api/vapi/webhook',  // ✨ Fixed path
+      vapiWebhook: '/api/vapi/webhook',
       ghlSignup: '/api/webhooks/ghl-signup',
       calls: '/api/calls/:clientId',
       singleCall: '/api/call/:callId',
@@ -67,8 +67,8 @@ app.get('/health/detailed', async (req, res) => {
   }
 });
 
-// ✨ VAPI webhook endpoint - FIXED PATH
-app.post('/api/vapi/webhook', handleVAPIWebhook);
+// VAPI webhook endpoint - FIXED PATH
+app.post('/api/vapi/webhook', handleVapiWebhook);  // ✨ FIXED: Matching case
 
 // GHL signup webhook endpoint
 app.post('/api/webhooks/ghl-signup', handleGHLSignup);
