@@ -57,15 +57,11 @@ async function getPhoneNumberFromVapi(phoneNumberId) {
 async function sendTelnyxSMS(toPhone, message) {
   try {
     console.log('📱 Sending SMS via Telnyx...');
+    console.log('   From: +18336053166 (Toll-Free)');  // ✨ Updated
     console.log('   To:', toPhone);
     console.log('   Message length:', message.length, 'chars');
     
-    // DEBUG: Check API key
     const apiKey = process.env.TELNYX_API_KEY;
-    console.log('🔍 DEBUG - API Key exists:', !!apiKey);
-    console.log('🔍 DEBUG - API Key length:', apiKey?.length);
-    console.log('🔍 DEBUG - API Key first 10 chars:', apiKey?.substring(0, 10));
-    console.log('🔍 DEBUG - API Key last 4 chars:', apiKey?.substring(apiKey.length - 4));
     
     if (!apiKey) {
       throw new Error('TELNYX_API_KEY environment variable not set');
@@ -74,7 +70,7 @@ async function sendTelnyxSMS(toPhone, message) {
     const response = await axios.post(
       'https://api.telnyx.com/v2/messages',
       {
-        from: '+14046719089', // Your Telnyx number
+        from: '+18336053166',  // ✨ UPDATED: Toll-free number
         to: toPhone,
         text: message
       },
@@ -343,18 +339,19 @@ async function handleVapiWebhook(req, res) {
       
       console.log('✅ Call saved successfully');
 
-      // ✨ FIXED: Send SMS notification via Telnyx with proper phone formatting
+      // Send SMS notification via Telnyx (toll-free number)
       if (client.owner_phone) {
         console.log('📱 Preparing SMS notification...');
+        console.log('   Raw owner_phone from DB:', client.owner_phone);
         
         // Format phone number to E.164
         const formattedPhone = formatPhoneE164(client.owner_phone);
         
+        console.log('   Formatted to E.164:', formattedPhone);
+        
         if (!formattedPhone) {
-          console.log('⚠️ Could not format owner phone number:', client.owner_phone);
+          console.log('❌ Could not format owner phone number:', client.owner_phone);
         } else {
-          console.log('📱 Formatted phone:', formattedPhone);
-          
           // Build SMS message (works for any industry)
           let smsMessage = `🔔 New Call - ${client.business_name}\n\n`;
           
@@ -371,13 +368,20 @@ async function handleVapiWebhook(req, res) {
           
           smsMessage += `\nSummary: ${aiSummary}\n\n`;
           smsMessage += `View full transcript in your CallBird dashboard.`;
-
-          const smsSent = await sendTelnyxSMS(formattedPhone, smsMessage);
           
-          if (smsSent) {
-            console.log('✅ SMS notification sent to:', formattedPhone);
-          } else {
-            console.log('⚠️ SMS notification failed');
+          console.log('📝 SMS message prepared (length:', smsMessage.length, 'chars)');
+          console.log('📤 About to call sendTelnyxSMS...');
+          
+          try {
+            const smsSent = await sendTelnyxSMS(formattedPhone, smsMessage);
+            
+            if (smsSent) {
+              console.log('✅ SMS notification sent successfully to:', formattedPhone);
+            } else {
+              console.log('⚠️ SMS notification returned false - check Telnyx logs above');
+            }
+          } catch (smsError) {
+            console.error('❌ SMS sending threw error:', smsError);
           }
         }
       } else {
