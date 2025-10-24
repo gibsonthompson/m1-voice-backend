@@ -149,3 +149,51 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log(`   → VAPI: http://localhost:${PORT}/api/vapi/webhook`);
   console.log(`   → GHL:  http://localhost:${PORT}/api/webhooks/ghl-signup`);
 });
+// Test GHL Connection
+app.get('/api/test-ghl', async (req, res) => {
+  try {
+    const axios = require('axios');
+    
+    const response = await axios.get(
+      `https://services.leadconnectorhq.com/locations/${process.env.GHL_LOCATION_ID}`,
+      {
+        headers: {
+          'Authorization': `Bearer ${process.env.GHL_API_KEY}`,
+          'Version': '2021-07-28'
+        }
+      }
+    );
+    
+    res.json({ 
+      success: true, 
+      location: response.data.location.name,
+      locationId: response.data.location.id
+    });
+  } catch (error) {
+    res.status(500).json({ 
+      success: false, 
+      error: error.response?.data || error.message 
+    });
+  }
+});
+
+// Test GHL SMS
+app.post('/api/test-ghl-sms', async (req, res) => {
+  try {
+    const { to, message } = req.body;
+    const { sendGHLSMS } = require('./webhooks');
+    
+    if (!to) {
+      return res.status(400).json({ success: false, error: 'Phone number required' });
+    }
+    
+    const result = await sendGHLSMS(
+      to, 
+      message || 'Test SMS from CallBird via GoHighLevel'
+    );
+    
+    res.json({ success: result });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});

@@ -6,7 +6,7 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_KEY
 );
 
-// Helper: Format phone number to E.164 format for Telnyx
+// Helper: Format phone number to E.164 format
 function formatPhoneE164(phone) {
   if (!phone) return null;
   
@@ -53,45 +53,152 @@ async function getPhoneNumberFromVapi(phoneNumberId) {
   }
 }
 
-// Send SMS via Telnyx
-async function sendTelnyxSMS(toPhone, message) {
+// GHL: Search for contact by phone number
+async function findGHLContact(phone) {
   try {
-    console.log('📱 Sending SMS via Telnyx...');
-    console.log('   From: +18336053166 (Toll-Free)');  // ✨ Updated
-    console.log('   To:', toPhone);
-    console.log('   Message length:', message.length, 'chars');
+    console.log('🔍 Searching for GHL contact:', phone);
     
-    const apiKey = process.env.TELNYX_API_KEY;
+    const response = await axios.get(
+      `https://services.leadconnectorhq.com/contacts/search/duplicate`,
+      {
+        params: {
+          locationId: process.env.GHL_LOCATION_ID,
+          number: phone
+        },
+        headers: {
+          'Authorization': `Bearer ${process.env.GHL_API_KEY}`,
+          'Version': '2021-07-28'
+        }
+      }
+    );
     
-    if (!apiKey) {
-      throw new Error('TELNYX_API_KEY environment variable not set');
+    if (response.data && response.data.contact) {
+      console.log('✅ Contact found:', response.data.contact.id);
+      return response.data.contact.id;
+    }
+    
+    console.log('⚠️ Contact not found');
+    return null;
+    
+  } catch (error) {
+    console.error('❌ Error searching contact:', error.response?.data || error.message);
+    return null;
+  }
+}
+
+// GHL: Create new contact
+async function createGHLContact(phone, name = null) {
+  try {
+    console.log('📝 Creating GHL contact:', phone);
+    
+    const contactData = {
+      locationId: process.env.GHL_LOCATION_ID,
+      phone: phone,
+      source: 'CallBird'
+    };
+    
+    // Add name if provided
+    if (name && name !== 'Unknown') {
+      const nameParts = name.split(' ');
+      contactData.firstName = nameParts[0];
+      if (nameParts.length > 1) {
+        contactData.lastName = nameParts.slice(1).join(' ');
+      }
     }
     
     const response = await axios.post(
-      'https://api.telnyx.com/v2/messages',
+      'https://services.leadconnectorhq.com/contacts/',
+      contactData,
       {
-        from: '+18336053166',  // ✨ UPDATED: Toll-free number
-        to: toPhone,
-        text: message
+        headers: {
+          'Authorization': `Bearer ${process.env.GHL_API_KEY}`,
+          'Content-Type': 'application/json',
+          'Version': '2021-07-28'
+        }
+      }
+    );
+    
+    const contactId = response.data.contact.id;
+    console.log('✅ Contact created:', contactId);
+    return contactId;
+    
+  } catch (error) {
+    console.error('❌ Error creating contact:', error.response?.data || error.message);
+    return null;
+  }
+}
+
+// GHL: Send SMS to contact
+async function sendGHLSMS(toPhone, message, businessOwnerName = null) {
+  try {
+    console.log('📱 Preparing to send SMS via GoHighLevel...');
+    console.log('   To:', toPhone);
+    console.log('   Message length:', message.length, 'chars');
+    
+    // Validate environment variables
+    if (!process.env.GHL_API_KEY || !process.env.GHL_LOCATION_ID) {
+      throw new Error('GHL_API_KEY or GHL_LOCATION_ID not configured');
+    }
+    
+    // Format phone to E.164
+    const formattedPhone = formatPhoneE164(toPhone);
+    if (!formattedPhone) {
+      throw new Error(`Invalid phone format: ${toPhone}`);
+    }
+    
+    console.log('   Formatted phone:', formattedPhone);
+    
+    // Step 1: Search for existing contact
+    let contactId = await findGHLContact(formattedPhone);
+    
+    // Step 2: Create contact if doesn't exist
+    if (!contactId) {
+      console.log('📝 Contact does not exist, creating...');
+      contactId = await createGHLContact(formattedPhone, businessOwnerName);
+      
+      if (!contactId) {
+        throw new Error('Failed to create contact');
+      }
+    }
+    
+    // Step 3: Send SMS using contactId
+    console.log('📤 Sending SMS to contactId:', contactId);
+    
+    const response = await axios.post(
+      'https://services.leadconnectorhq.com/conversations/messages',
+      {
+        type: 'SMS',
+        contactId: contactId,
+        message: message
       },
       {
         headers: {
-          'Authorization': `Bearer ${apiKey}`,
-          'Content-Type': 'application/json'
+          'Authorization': `Bearer ${process.env.GHL_API_KEY}`,
+          'Content-Type': 'application/json',
+          'Version': '2021-07-28'
         }
       }
     );
 
-    console.log('✅ SMS sent successfully!');
-    console.log('   Message ID:', response.data.data.id);
+    console.log('✅ SMS sent via GHL successfully!');
+    console.log('   Conversation ID:', response.data.conversationId);
+    console.log('   Message ID:', response.data.messageId || response.data.id);
     return true;
+    
   } catch (error) {
-    console.error('❌ Telnyx SMS error:', error.response?.data || error.message);
+    console.error('❌ GHL SMS error:', error.response?.data || error.message);
+    
+    // Log detailed error for debugging
+    if (error.response) {
+      console.error('   Status:', error.response.status);
+      console.error('   Data:', JSON.stringify(error.response.data, null, 2));
+    }
+    
     return false;
   }
 }
 
-// Extract customer name from transcript (works across all industries)
+// Extract customer name from transcript
 function extractCustomerName(transcript) {
   const patterns = [
     /my name is (\w+(?:\s+\w+)?)/i,
@@ -106,7 +213,6 @@ function extractCustomerName(transcript) {
     const match = transcript.match(pattern);
     if (match && match[1]) {
       const name = match[1].trim();
-      // Filter out common false positives
       const excludeWords = ['calling', 'interested', 'looking', 'trying', 'hoping', 'wondering'];
       if (!excludeWords.some(word => name.toLowerCase().includes(word))) {
         return name;
@@ -117,13 +223,12 @@ function extractCustomerName(transcript) {
   return 'Unknown';
 }
 
-// Extract phone number from transcript (universal)
+// Extract phone number from transcript
 function extractPhoneNumber(transcript) {
   const phonePattern = /(\+?1?\s*\(?[2-9]\d{2}\)?[\s.-]?\d{3}[\s.-]?\d{4})/;
   const match = transcript.match(phonePattern);
   if (match) {
     const cleaned = match[1].replace(/\D/g, '');
-    // Return formatted phone number
     if (cleaned.length === 10) {
       return `(${cleaned.substring(0,3)}) ${cleaned.substring(3,6)}-${cleaned.substring(6)}`;
     }
@@ -132,103 +237,28 @@ function extractPhoneNumber(transcript) {
   return null;
 }
 
-// Extract email from transcript (universal)
+// Extract email from transcript
 function extractEmail(transcript) {
   const emailPattern = /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/;
   const match = transcript.match(emailPattern);
   return match ? match[0] : null;
 }
 
-// Detect urgency level (universal - works for all industries)
+// Detect urgency level
 function detectUrgency(transcript) {
   const lowerTranscript = transcript.toLowerCase();
   
-  // Emergency keywords
   const emergencyWords = ['emergency', 'urgent', 'asap', 'immediately', 'right now', 'critical', 'serious'];
   const hasEmergency = emergencyWords.some(word => lowerTranscript.includes(word));
   
   if (hasEmergency) return 'HIGH';
   
-  // Medium urgency keywords
   const mediumWords = ['soon', 'quickly', 'today', 'this week'];
   const hasMedium = mediumWords.some(word => lowerTranscript.includes(word));
   
   if (hasMedium) return 'MEDIUM';
   
   return 'NORMAL';
-}
-
-// Generate smart summary from transcript (industry-agnostic)
-function generateSmartSummary(transcript) {
-  if (!transcript || transcript.length < 20) {
-    return 'Customer called - no details captured';
-  }
-  
-  const lowerTranscript = transcript.toLowerCase();
-  
-  // Extract key information
-  const name = extractCustomerName(transcript);
-  const phone = extractPhoneNumber(transcript);
-  const email = extractEmail(transcript);
-  const urgency = detectUrgency(transcript);
-  
-  // Look for common inquiry patterns (universal)
-  let inquiryType = null;
-  
-  if (lowerTranscript.includes('question about') || lowerTranscript.includes('wondering about')) {
-    inquiryType = 'inquiry';
-  } else if (lowerTranscript.includes('appointment') || lowerTranscript.includes('schedule') || lowerTranscript.includes('book')) {
-    inquiryType = 'appointment request';
-  } else if (lowerTranscript.includes('price') || lowerTranscript.includes('cost') || lowerTranscript.includes('quote')) {
-    inquiryType = 'pricing inquiry';
-  } else if (lowerTranscript.includes('problem') || lowerTranscript.includes('issue') || lowerTranscript.includes('help')) {
-    inquiryType = 'service request';
-  } else if (lowerTranscript.includes('interested in') || lowerTranscript.includes('looking for')) {
-    inquiryType = 'general inquiry';
-  }
-  
-  // Build smart summary
-  let summary = '';
-  
-  if (name && name !== 'Unknown') {
-    summary += `${name} called`;
-  } else {
-    summary += 'Customer called';
-  }
-  
-  if (inquiryType) {
-    summary += ` with ${inquiryType}`;
-  }
-  
-  if (urgency === 'HIGH') {
-    summary += ' (URGENT)';
-  }
-  
-  // Add contact info if available
-  let contactInfo = [];
-  if (phone) contactInfo.push(phone);
-  if (email) contactInfo.push(email);
-  
-  if (contactInfo.length > 0) {
-    summary += `. Contact: ${contactInfo.join(', ')}`;
-  }
-  
-  if (summary.length > 30) {
-    return summary.trim() + '.';
-  }
-  
-  // Fallback: extract first meaningful sentence
-  const sentences = transcript.split(/[.!?]/).filter(s => s.trim().length > 15);
-  
-  if (sentences.length > 0) {
-    const firstSentence = sentences[0].trim();
-    if (firstSentence.length < 200) {
-      return firstSentence + '.';
-    }
-  }
-  
-  // Last resort: truncate transcript
-  return transcript.substring(0, 150).trim() + '...';
 }
 
 // Main webhook handler
@@ -269,7 +299,7 @@ async function handleVapiWebhook(req, res) {
       const transcript = message.transcript || '';
       const callerPhone = call.customer?.number || 'Unknown';
       
-      // Use VAPI's analysis if available, otherwise fallback to extraction
+      // Use VAPI's analysis if available
       const analysis = message.analysis || {};
       
       const customerName = analysis.structuredData?.customerName || 
@@ -286,7 +316,7 @@ async function handleVapiWebhook(req, res) {
       
       const serviceType = analysis.structuredData?.serviceType || null;
       
-      // Build smart summary using VAPI data
+      // Build smart summary
       let aiSummary = '';
       if (customerName && customerName !== 'Unknown') {
         aiSummary = `${customerName} called`;
@@ -339,9 +369,11 @@ async function handleVapiWebhook(req, res) {
       
       console.log('✅ Call saved successfully');
 
-      // Send SMS notification via Telnyx (toll-free number)
+      // Send SMS notification via GHL
+      let smsSent = false;
+      
       if (client.owner_phone) {
-        console.log('📱 Preparing SMS notification...');
+        console.log('📱 Preparing SMS notification via GHL...');
         console.log('   Raw owner_phone from DB:', client.owner_phone);
         
         // Format phone number to E.164
@@ -352,9 +384,8 @@ async function handleVapiWebhook(req, res) {
         if (!formattedPhone) {
           console.log('❌ Could not format owner phone number:', client.owner_phone);
         } else {
-          // Build SMS message (works for any industry)
+          // Build SMS message
           let smsMessage = `🔔 New Call - ${client.business_name}\n\n`;
-          
           smsMessage += `Customer: ${customerName}\n`;
           smsMessage += `Phone: ${customerPhone}\n`;
           
@@ -367,21 +398,18 @@ async function handleVapiWebhook(req, res) {
           }
           
           smsMessage += `\nSummary: ${aiSummary}\n\n`;
-          smsMessage += `View full transcript in your CallBird dashboard.`;
+          smsMessage += `View full details in your CallBird dashboard.`;
           
-          console.log('📝 SMS message prepared (length:', smsMessage.length, 'chars)');
-          console.log('📤 About to call sendTelnyxSMS...');
+          console.log('📝 SMS message prepared');
           
-          try {
-            const smsSent = await sendTelnyxSMS(formattedPhone, smsMessage);
-            
-            if (smsSent) {
-              console.log('✅ SMS notification sent successfully to:', formattedPhone);
-            } else {
-              console.log('⚠️ SMS notification returned false - check Telnyx logs above');
-            }
-          } catch (smsError) {
-            console.error('❌ SMS sending threw error:', smsError);
+          // Send via GHL (with business owner's first name for contact creation)
+          const ownerFirstName = client.business_name ? client.business_name.split(' ')[0] : null;
+          smsSent = await sendGHLSMS(formattedPhone, smsMessage, ownerFirstName);
+          
+          if (smsSent) {
+            console.log('✅ SMS notification sent successfully via GHL');
+          } else {
+            console.log('⚠️ SMS notification failed via GHL');
           }
         }
       } else {
@@ -392,7 +420,7 @@ async function handleVapiWebhook(req, res) {
         received: true,
         saved: true,
         callId: insertedCall[0]?.id,
-        smsSent: !!client.owner_phone,
+        smsSent: smsSent,
         extractedData: {
           customerName,
           customerPhone,
