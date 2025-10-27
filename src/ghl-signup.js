@@ -193,22 +193,32 @@ async function handleGHLSignup(req, res) {
   try {
     console.log('📝 GHL Signup Webhook Received:', JSON.stringify(req.body, null, 2));
 
-    const {
-      business_name,
-      business_website,
-      owner_name,
-      owner_phone,
-      email,
-      industry,
-      preferred_area_code
-    } = req.body;
+    // Handle BOTH camelCase (from GHL) and snake_case (legacy) field names
+    const businessName = req.body.businessName || req.body.business_name;
+    const websiteUrl = req.body.websiteUrl || req.body.business_website;
+    const firstName = req.body.firstName || req.body.owner_name;
+    const lastName = req.body.lastName || '';
+    const ownerName = lastName ? `${firstName} ${lastName}`.trim() : firstName;
+    const phone = req.body.phone || req.body.owner_phone;
+    const email = req.body.email;
+    const industry = req.body.industry;
+    const areaCode = req.body.areaCode || req.body.preferred_area_code || '404';
+
+    console.log('📋 Parsed fields:');
+    console.log(`   Business: ${businessName}`);
+    console.log(`   Owner: ${ownerName}`);
+    console.log(`   Email: ${email}`);
+    console.log(`   Phone: ${phone}`);
+    console.log(`   Website: ${websiteUrl || 'none'}`);
+    console.log(`   Industry: ${industry}`);
+    console.log(`   Area Code: ${areaCode}`);
 
     // Validate required fields
-    if (!business_name || !owner_phone || !email) {
+    if (!businessName || !phone || !email) {
       console.error('❌ Missing required fields');
       return res.status(400).json({ 
         error: 'Missing required fields',
-        required: ['business_name', 'owner_phone', 'email'],
+        required: ['businessName (or business_name)', 'phone (or owner_phone)', 'email'],
         received: req.body
       });
     }
@@ -229,11 +239,11 @@ async function handleGHLSignup(req, res) {
     }
 
     // Format phone numbers
-    const formattedOwnerPhone = formatPhoneE164(owner_phone);
-    const areaCode = preferred_area_code || '404';
+    const formattedOwnerPhone = formatPhoneE164(phone);
+    console.log(`📱 Formatted phone: ${formattedOwnerPhone}`);
 
     // Step 1: Create VAPI assistant with knowledge base
-    const assistant = await createVAPIAssistant(business_name, industry, business_website);
+    const assistant = await createVAPIAssistant(businessName, industry, websiteUrl);
 
     // Step 2: Provision phone number
     const phoneNumber = await provisionVAPIPhone(areaCode, assistant.id);
@@ -244,10 +254,10 @@ async function handleGHLSignup(req, res) {
     const { data: newClient, error: clientError } = await supabase
       .from('clients')
       .insert({
-        business_name,
-        business_website: business_website || null,
+        business_name: businessName,
+        business_website: websiteUrl || null,
         phone_number: phoneNumber.number,
-        owner_name: owner_name || null,
+        owner_name: ownerName || null,
         owner_phone: formattedOwnerPhone,
         email,
         industry: industry || 'general',
@@ -289,8 +299,8 @@ async function handleGHLSignup(req, res) {
         },
         body: JSON.stringify({
           email: email,
-          contact_name: owner_name,
-          business_name: business_name,
+          contact_name: ownerName,
+          business_name: businessName,
           phone: formattedOwnerPhone,
           client_id: newClient.id
         })
@@ -311,7 +321,7 @@ async function handleGHLSignup(req, res) {
     // Step 5: Send welcome email (using Resend)
     // TODO: Add email sending here if you want welcome emails
 
-    console.log('🎉 Onboarding complete for:', business_name);
+    console.log('🎉 Onboarding complete for:', businessName);
 
     res.status(200).json({
       success: true,
