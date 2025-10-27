@@ -31,6 +31,14 @@ function formatPhoneE164(phone) {
   return `+${digits}`;
 }
 
+// Validate area code (must be 3 digits)
+function validateAreaCode(areaCode) {
+  if (!areaCode) return '404'; // Default
+  const cleaned = String(areaCode).replace(/\D/g, '');
+  if (cleaned.length === 3) return cleaned;
+  return '404'; // Fallback if invalid
+}
+
 // Create VAPI assistant with knowledge base
 async function createVAPIAssistant(businessName, industry, websiteUrl) {
   try {
@@ -80,7 +88,7 @@ async function createVAPIAssistant(businessName, industry, websiteUrl) {
       endCallPhrases: ['goodbye', 'bye', 'hang up'],
       recordingEnabled: true,
       serverMessages: ['end-of-call-report', 'transcript'],
-      serverUrl: `${process.env.BACKEND_URL}/api/webhooks/vapi`,
+      serverUrl: process.env.BACKEND_URL + '/api/webhooks/vapi',
       analysisPlan: {
         structuredDataSchema: {
           type: 'object',
@@ -122,74 +130,33 @@ async function createVAPIAssistant(businessName, industry, websiteUrl) {
   }
 }
 
-// Provision phone number with area code preference
-async function provisionVAPIPhone(areaCode, assistantId) {
-  try {
-    console.log(`📞 Provisioning phone number with area code ${areaCode}...`);
-
-    // VAPI changed parameter name on Jan 29, 2025: areaCode → numberDesiredAreaCode
-    const response = await fetch('https://api.vapi.ai/phone-number', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${process.env.VAPI_API_KEY}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        provider: 'vapi',
-        numberDesiredAreaCode: areaCode,  // Updated parameter name
-        assistantId: assistantId,
-        name: `CallBird ${areaCode}`
-      })
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      
-      // Try with fallback area codes if preferred one unavailable
-      if (error.message && error.message.some(msg => msg.includes('area code'))) {
-        console.log('⚠️ Area code unavailable, trying fallback...');
-        const fallbackCodes = ['404', '678', '770', '470'];
-        
-        for (const code of fallbackCodes) {
-          if (code === areaCode) continue; // Skip the one we already tried
-          
-          try {
-            const retryResponse = await fetch('https://api.vapi.ai/phone-number', {
-              method: 'POST',
-              headers: {
-                'Authorization': `Bearer ${process.env.VAPI_API_KEY}`,
-                'Content-Type': 'application/json'
-              },
-              body: JSON.stringify({
-                provider: 'vapi',
-                numberDesiredAreaCode: code,
-                assistantId: assistantId,
-                name: `CallBird ${code}`
-              })
-            });
-
-            if (retryResponse.ok) {
-              const phoneData = await retryResponse.json();
-              console.log(`✅ Phone provisioned with fallback ${code}: ${phoneData.number}`);
-              return phoneData;
-            }
-          } catch (retryError) {
-            continue;
-          }
-        }
-      }
-      
-      console.error('❌ VAPI phone provisioning failed:', error);
-      throw new Error(`Failed to provision phone: ${JSON.stringify(error)}`);
-    }
-
-    const phoneData = await response.json();
-    console.log(`✅ Phone number provisioned: ${phoneData.number}`);
-    return phoneData;
-  } catch (error) {
-    console.error('❌ Phone provisioning error:', error);
-    throw error;
+// Purchase VAPI phone number with specified area code
+async function provisionVAPIPhone(assistantId, areaCode) {
+  const validAreaCode = validateAreaCode(areaCode);
+  
+  console.log(`📞 Purchasing phone number with area code: ${validAreaCode}`);
+  
+  const buyResponse = await fetch('https://api.vapi.ai/phone-number/buy', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${process.env.VAPI_API_KEY}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      areaCode: validAreaCode,
+      name: `Assistant Phone`,
+      assistantId: assistantId
+    })
+  });
+  
+  if (!buyResponse.ok) {
+    const errorText = await buyResponse.text();
+    throw new Error(`Failed to buy phone number: ${errorText}`);
   }
+  
+  const phoneData = await buyResponse.json();
+  console.log(`✅ Phone number purchased: ${phoneData.number}`);
+  return phoneData.number;
 }
 
 // Main GHL signup handler
@@ -257,7 +224,7 @@ async function handleGHLSignup(req, res) {
     const assistant = await createVAPIAssistant(businessName, industry, websiteUrl);
 
     // Step 2: Provision phone number
-    const phoneNumber = await provisionVAPIPhone(areaCode, assistant.id);
+    const phoneNumber = await provisionVAPIPhone(assistant.id, areaCode);
 
     // Step 3: Create client record with TRIAL fields
     const trialEndsAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days from now
@@ -266,14 +233,13 @@ async function handleGHLSignup(req, res) {
       .from('clients')
       .insert({
         business_name: businessName,
-        business_website: websiteUrl || null,
-        phone_number: phoneNumber.number,
+        phone_number: phoneNumber,
         owner_name: ownerName || null,
         owner_phone: formattedOwnerPhone,
         email,
         industry: industry || 'general',
         vapi_assistant_id: assistant.id,
-        vapi_phone_number: phoneNumber.number,
+        vapi_phone_number: phoneNumber,
         knowledge_base_id: assistant.model.knowledgeBaseId || null,
         
         // TRIAL FIELDS
@@ -293,7 +259,7 @@ async function handleGHLSignup(req, res) {
     }
 
     console.log(`🎉 Client created successfully: ${newClient.business_name}`);
-    console.log(`📞 Phone: ${phoneNumber.number}`);
+    console.log(`📞 Phone: ${phoneNumber}`);
     console.log(`🆔 Client ID: ${newClient.id}`);
     console.log(`⏰ Trial ends: ${newClient.trial_ends_at}`);
 
@@ -303,7 +269,7 @@ async function handleGHLSignup(req, res) {
     console.log('💳 Creating Stripe customer...');
 
     try {
-      const stripeResponse = await fetch(`${process.env.BACKEND_URL || 'https://dolphin-app-fohdg.ondigitalocean.app'}/api/webhooks/ghl-payment`, {
+      const stripeResponse = await fetch(`${process.env.BACKEND_URL}/api/webhooks/ghl-payment`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -329,9 +295,6 @@ async function handleGHLSignup(req, res) {
       console.error('⚠️ Stripe customer creation error (non-blocking):', stripeError.message);
     }
 
-    // Step 5: Send welcome email (using Resend)
-    // TODO: Add email sending here if you want welcome emails
-
     console.log('🎉 Onboarding complete for:', businessName);
 
     res.status(200).json({
@@ -340,7 +303,7 @@ async function handleGHLSignup(req, res) {
       client: {
         id: newClient.id,
         business_name: newClient.business_name,
-        phone_number: phoneNumber.number,
+        phone_number: phoneNumber,
         trial_ends_at: newClient.trial_ends_at,
         subscription_status: 'trial'
       }
