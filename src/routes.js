@@ -3,7 +3,7 @@ const router = express.Router();
 
 // Import handlers
 const { handleGHLSignup } = require('./ghl-signup');
-const { handleVAPIWebhook } = require('./webhooks');
+const { handleVapiWebhook } = require('./webhooks');  // ← FIXED: lowercase 'api'
 const { handleStripeWebhook } = require('./routes/stripe-webhook');
 const { handleGHLPaymentWebhook } = require('./routes/ghl-payment-webhook');
 const { 
@@ -23,7 +23,7 @@ router.post('/webhooks/ghl-signup', handleGHLSignup);
 router.post('/webhooks/ghl-payment', handleGHLPaymentWebhook);
 
 // VAPI Call Completion - Saves call data + tracks usage
-router.post('/vapi/webhook', handleVAPIWebhook);
+router.post('/vapi/webhook', handleVapiWebhook);  // ← FIXED: lowercase 'api'
 
 // Stripe Webhook - Handles subscription events
 router.post('/webhooks/stripe', express.raw({ type: 'application/json' }), handleStripeWebhook);
