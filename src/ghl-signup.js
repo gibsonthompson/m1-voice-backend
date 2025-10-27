@@ -195,7 +195,14 @@ async function handleGHLSignup(req, res) {
 
     // Handle BOTH camelCase (from GHL) and snake_case (legacy) field names
     const businessName = req.body.businessName || req.body.business_name;
-    const websiteUrl = req.body.websiteUrl || req.body.business_website;
+    let websiteUrl = req.body.websiteUrl || req.body.business_website;
+    
+    // Auto-add https:// if missing
+    if (websiteUrl && !websiteUrl.startsWith('http://') && !websiteUrl.startsWith('https://')) {
+      websiteUrl = `https://${websiteUrl}`;
+      console.log(`🔗 Auto-fixed website URL: ${websiteUrl}`);
+    }
+    
     const firstName = req.body.firstName || req.body.owner_name;
     const lastName = req.body.lastName || '';
     const ownerName = lastName ? `${firstName} ${lastName}`.trim() : firstName;
