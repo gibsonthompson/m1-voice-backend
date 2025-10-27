@@ -1,13 +1,16 @@
 const { createClient } = require('@supabase/supabase-js');
 const fetch = require('node-fetch');
 const { createKnowledgeBaseFromWebsite } = require('./website-scraper');
-const { provisionLocalPhone } = require('./phone-provisioning'); // NEW
+const { provisionLocalPhone } = require('./phone-provisioning');
+const { Resend } = require('resend');
 
-// Initialize Supabase with SERVICE KEY
+// Initialize services
 const supabase = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_SERVICE_KEY
 );
+
+const resend = new Resend(process.env.RESEND_API_KEY);
 
 // Industry template mapping
 const INDUSTRY_TEMPLATES = {
@@ -81,7 +84,7 @@ async function createVAPIAssistant(businessName, industry, websiteUrl) {
       endCallPhrases: ['goodbye', 'bye', 'hang up'],
       recordingEnabled: true,
       serverMessages: ['end-of-call-report', 'transcript'],
-      serverUrl: process.env.BACKEND_URL + '/api/webhooks/vapi',
+      serverUrl: process.env.BACKEND_URL + '/webhook/vapi',
       analysisPlan: {
         structuredDataSchema: {
           type: 'object',
@@ -123,6 +126,37 @@ async function createVAPIAssistant(businessName, industry, websiteUrl) {
   }
 }
 
+// Configure phone number webhook
+async function configurePhoneWebhook(phoneId, assistantId) {
+  try {
+    console.log(`🔗 Configuring webhook for phone ${phoneId}...`);
+    
+    const response = await fetch(`https://api.vapi.ai/phone-number/${phoneId}`, {
+      method: 'PATCH',
+      headers: {
+        'Authorization': `Bearer ${process.env.VAPI_API_KEY}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        assistantId: assistantId,
+        serverUrl: process.env.BACKEND_URL + '/webhook/vapi'
+      })
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('⚠️ Phone webhook config failed:', errorText);
+      return false;
+    }
+
+    console.log(`✅ Phone webhook configured`);
+    return true;
+  } catch (error) {
+    console.error('⚠️ Error configuring phone webhook:', error);
+    return false;
+  }
+}
+
 // Main GHL signup handler
 async function handleGHLSignup(req, res) {
   try {
@@ -145,7 +179,7 @@ async function handleGHLSignup(req, res) {
     const email = req.body.email;
     const industry = req.body.industry;
     
-    // NEW: Extract city and state
+    // Extract city and state
     const businessCity = req.body.businessCity || req.body.business_city;
     const businessState = req.body.businessState || req.body.business_state;
 
@@ -156,8 +190,8 @@ async function handleGHLSignup(req, res) {
     console.log(`   Phone: ${phone}`);
     console.log(`   Website: ${websiteUrl || 'none'}`);
     console.log(`   Industry: ${industry}`);
-    console.log(`   City: ${businessCity}`);  // NEW
-    console.log(`   State: ${businessState}`); // NEW
+    console.log(`   City: ${businessCity}`);
+    console.log(`   State: ${businessState}`);
 
     // Validate required fields
     if (!businessName || !phone || !email) {
@@ -169,7 +203,7 @@ async function handleGHLSignup(req, res) {
       });
     }
 
-    // NEW: Validate city and state
+    // Validate city and state
     if (!businessCity || !businessState) {
       console.error('❌ Missing city or state');
       return res.status(400).json({ 
@@ -213,17 +247,20 @@ async function handleGHLSignup(req, res) {
     
     console.log(`✅ Phone provisioned: ${phoneData.number}`);
 
+    // Step 2.5: Configure phone webhook
+    await configurePhoneWebhook(phoneData.id, assistant.id);
+
     // Step 3: Create client record with TRIAL fields
-    const trialEndsAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days from now
+    const trialEndsAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
     
     const { data: newClient, error: clientError } = await supabase
       .from('clients')
       .insert({
         business_name: businessName,
-        business_city: businessCity,           // NEW
-        business_state: businessState,         // NEW
+        business_city: businessCity,
+        business_state: businessState,
         phone_number: phoneData.number,
-        phone_area_code: phoneData.number.substring(2, 5), // NEW
+        phone_area_code: phoneData.number.substring(2, 5),
         owner_name: ownerName || null,
         owner_phone: formattedOwnerPhone,
         email,
@@ -231,8 +268,6 @@ async function handleGHLSignup(req, res) {
         vapi_assistant_id: assistant.id,
         vapi_phone_number: phoneData.number,
         knowledge_base_id: assistant.model.knowledgeBaseId || null,
-        
-        // TRIAL FIELDS
         subscription_status: 'trial',
         trial_ends_at: trialEndsAt,
         status: 'active',
@@ -252,11 +287,36 @@ async function handleGHLSignup(req, res) {
     console.log(`📍 Location: ${businessCity}, ${businessState}`);
     console.log(`📞 Phone: ${phoneData.number}`);
     console.log(`🆔 Client ID: ${newClient.id}`);
-    console.log(`⏰ Trial ends: ${newClient.trial_ends_at}`);
 
-    // ============================================
-    // Step 4: CREATE STRIPE CUSTOMER
-    // ============================================
+    // Step 4: Send password setup email
+    console.log('📧 Sending welcome email...');
+    
+    try {
+      const { data: emailData, error: emailError } = await resend.emails.send({
+        from: 'CallBird <onboarding@callbird.ai>',
+        to: email,
+        subject: 'Welcome to CallBird - Set Your Password',
+        html: `
+          <h2>Welcome to CallBird, ${firstName}!</h2>
+          <p>Your AI receptionist is ready for ${businessName}.</p>
+          <p><strong>Your Phone Number:</strong> ${phoneData.number}</p>
+          <p><strong>Location:</strong> ${businessCity}, ${businessState}</p>
+          <p>Set your password to access your dashboard:</p>
+          <p><a href="https://app.callbird.ai/set-password?client=${newClient.id}" style="background:#0066cc;color:white;padding:12px 24px;text-decoration:none;border-radius:4px;display:inline-block;">Set Password</a></p>
+          <p>Your 7-day free trial has started. No credit card required.</p>
+        `
+      });
+
+      if (emailError) {
+        console.error('⚠️ Email send failed:', emailError);
+      } else {
+        console.log('✅ Welcome email sent');
+      }
+    } catch (emailError) {
+      console.error('⚠️ Email error:', emailError);
+    }
+
+    // Step 5: Create Stripe customer
     console.log('💳 Creating Stripe customer...');
 
     try {
@@ -279,10 +339,8 @@ async function handleGHLSignup(req, res) {
       } else {
         const stripeData = await stripeResponse.json();
         console.log('✅ Stripe customer created:', stripeData.stripe_customer_id);
-        console.log('✅ Trial started, expires:', stripeData.trial_ends_at);
       }
     } catch (stripeError) {
-      // Don't fail the entire signup if Stripe fails
       console.error('⚠️ Stripe customer creation error (non-blocking):', stripeError.message);
     }
 
