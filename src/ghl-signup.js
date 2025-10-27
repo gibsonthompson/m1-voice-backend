@@ -1,5 +1,6 @@
 const { createClient } = require('@supabase/supabase-js');
 const fetch = require('node-fetch');
+const crypto = require('crypto');
 const { createKnowledgeBaseFromWebsite } = require('./website-scraper');
 const { provisionLocalPhone } = require('./phone-provisioning');
 const { Resend } = require('resend');
@@ -35,12 +36,42 @@ function formatPhoneE164(phone) {
   return `+${digits}`;
 }
 
+// Generate secure password token
+function generatePasswordToken() {
+  return crypto.randomBytes(32).toString('hex');
+}
+
+// Create password setup token
+async function createPasswordToken(userId, email) {
+  const token = generatePasswordToken();
+  const expiresAt = new Date();
+  expiresAt.setHours(expiresAt.getHours() + 24);
+  
+  const { data, error } = await supabase
+    .from('password_reset_tokens')
+    .insert({
+      user_id: userId,
+      email: email,
+      token: token,
+      expires_at: expiresAt.toISOString(),
+      used: false
+    })
+    .select()
+    .single();
+  
+  if (error) {
+    console.error('❌ Error creating password token:', error);
+    throw new Error('Failed to create password token');
+  }
+  
+  return token;
+}
+
 // Create VAPI assistant with knowledge base
 async function createVAPIAssistant(businessName, industry, websiteUrl) {
   try {
     console.log(`🤖 Creating VAPI assistant for ${businessName}...`);
     
-    // Create knowledge base from website if provided
     let knowledgeBaseId = null;
     if (websiteUrl && websiteUrl.trim().length > 0) {
       console.log('🌐 Website URL provided, creating knowledge base...');
@@ -162,11 +193,9 @@ async function handleGHLSignup(req, res) {
   try {
     console.log('📝 GHL Signup Webhook Received:', JSON.stringify(req.body, null, 2));
 
-    // Handle BOTH camelCase (from GHL) and snake_case (legacy) field names
     const businessName = req.body.businessName || req.body.business_name;
     let websiteUrl = req.body.websiteUrl || req.body.business_website;
     
-    // Auto-add https:// if missing
     if (websiteUrl && !websiteUrl.startsWith('http://') && !websiteUrl.startsWith('https://')) {
       websiteUrl = `https://${websiteUrl}`;
       console.log(`🔗 Auto-fixed website URL: ${websiteUrl}`);
@@ -178,8 +207,6 @@ async function handleGHLSignup(req, res) {
     const phone = req.body.phone || req.body.owner_phone;
     const email = req.body.email;
     const industry = req.body.industry;
-    
-    // Extract city and state
     const businessCity = req.body.businessCity || req.body.business_city;
     const businessState = req.body.businessState || req.body.business_state;
 
@@ -193,22 +220,11 @@ async function handleGHLSignup(req, res) {
     console.log(`   City: ${businessCity}`);
     console.log(`   State: ${businessState}`);
 
-    // Validate required fields
-    if (!businessName || !phone || !email) {
+    if (!businessName || !phone || !email || !businessCity || !businessState) {
       console.error('❌ Missing required fields');
       return res.status(400).json({ 
         error: 'Missing required fields',
-        required: ['businessName', 'phone', 'email'],
-        received: req.body
-      });
-    }
-
-    // Validate city and state
-    if (!businessCity || !businessState) {
-      console.error('❌ Missing city or state');
-      return res.status(400).json({ 
-        error: 'Missing required fields',
-        required: ['businessCity', 'businessState'],
+        required: ['businessName', 'phone', 'email', 'businessCity', 'businessState'],
         received: req.body
       });
     }
@@ -230,14 +246,13 @@ async function handleGHLSignup(req, res) {
       });
     }
 
-    // Format phone numbers
     const formattedOwnerPhone = formatPhoneE164(phone);
     console.log(`📱 Formatted phone: ${formattedOwnerPhone}`);
 
     // Step 1: Create VAPI assistant with knowledge base
     const assistant = await createVAPIAssistant(businessName, industry, websiteUrl);
 
-    // Step 2: Provision LOCAL phone number based on city/state
+    // Step 2: Provision LOCAL phone number
     const phoneData = await provisionLocalPhone(
       businessCity,
       businessState,
@@ -250,7 +265,7 @@ async function handleGHLSignup(req, res) {
     // Step 2.5: Configure phone webhook
     await configurePhoneWebhook(phoneData.id, assistant.id);
 
-    // Step 3: Create client record with TRIAL fields
+    // Step 3: Create client record
     const trialEndsAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
     
     const { data: newClient, error: clientError } = await supabase
@@ -284,11 +299,32 @@ async function handleGHLSignup(req, res) {
     }
 
     console.log(`🎉 Client created successfully: ${newClient.business_name}`);
-    console.log(`📍 Location: ${businessCity}, ${businessState}`);
-    console.log(`📞 Phone: ${phoneData.number}`);
-    console.log(`🆔 Client ID: ${newClient.id}`);
 
-    // Step 4: Send password setup email
+    // Step 4: Create user record
+    const { data: newUser, error: userError } = await supabase
+      .from('users')
+      .insert({
+        client_id: newClient.id,
+        email: email,
+        first_name: firstName,
+        last_name: lastName || null,
+        role: 'admin'
+      })
+      .select()
+      .single();
+
+    if (userError) {
+      console.error('❌ User creation error:', userError);
+      throw userError;
+    }
+
+    console.log(`✅ User created: ${newUser.id}`);
+
+    // Step 5: Generate password token
+    const token = await createPasswordToken(newUser.id, email);
+    console.log(`✅ Password token generated`);
+
+    // Step 6: Send password setup email
     console.log('📧 Sending welcome email...');
     
     try {
@@ -302,7 +338,7 @@ async function handleGHLSignup(req, res) {
           <p><strong>Your Phone Number:</strong> ${phoneData.number}</p>
           <p><strong>Location:</strong> ${businessCity}, ${businessState}</p>
           <p>Set your password to access your dashboard:</p>
-          <p><a href="https://app.callbirdai.com/set-password?client=${newClient.id}" style="background:#0066cc;color:white;padding:12px 24px;text-decoration:none;border-radius:4px;display:inline-block;">Set Password</a></p>
+          <p><a href="https://app.callbirdai.com/auth/set-password?token=${token}" style="background:#0066cc;color:white;padding:12px 24px;text-decoration:none;border-radius:4px;display:inline-block;">Set Password</a></p>
           <p>Your 7-day free trial has started. No credit card required.</p>
         `
       });
@@ -316,7 +352,7 @@ async function handleGHLSignup(req, res) {
       console.error('⚠️ Email error:', emailError);
     }
 
-    // Step 5: Create Stripe customer
+    // Step 7: Create Stripe customer
     console.log('💳 Creating Stripe customer...');
 
     try {
