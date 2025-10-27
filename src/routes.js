@@ -1,54 +1,56 @@
-const { createClient } = require('@supabase/supabase-js');
+const express = require('express');
+const router = express.Router();
 
-const supabase = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_KEY
-);
+// Import handlers
+const { handleGHLSignup } = require('./ghl-signup');
+const { handleVAPIWebhook } = require('./webhooks');
+const { handleStripeWebhook } = require('./routes/stripe-webhook');
+const { handleGHLPaymentWebhook } = require('./routes/ghl-payment-webhook');
+const { 
+  createCheckoutSession, 
+  createPortalSession,
+  getSubscriptionStatus 
+} = require('./routes/billing');
 
-// GET /api/calls/:clientId - Get all calls for a client
-async function getClientCalls(req, res) {
-  try {
-    const { clientId } = req.params;
+// ============================================
+// WEBHOOK ENDPOINTS
+// ============================================
 
-    const { data: calls, error } = await supabase
-      .from('calls')
-      .select('*')
-      .eq('client_id', clientId)
-      .order('created_at', { ascending: false });
+// GHL Form Signup - Creates client + VAPI assistant
+router.post('/webhooks/ghl-signup', handleGHLSignup);
 
-    if (error) {
-      console.error('Error fetching calls:', error);
-      return res.status(500).json({ error: 'Failed to fetch calls' });
-    }
+// GHL Payment Webhook - Creates Stripe customer (called after ghl-signup)
+router.post('/webhooks/ghl-payment', handleGHLPaymentWebhook);
 
-    return res.status(200).json({ calls: calls || [] });
-  } catch (error) {
-    console.error('Error:', error);
-    return res.status(500).json({ error: error.message });
-  }
-}
+// VAPI Call Completion - Saves call data + tracks usage
+router.post('/vapi/webhook', handleVAPIWebhook);
 
-// GET /api/call/:callId - Get single call details
-async function getCallDetail(req, res) {
-  try {
-    const { callId } = req.params;
+// Stripe Webhook - Handles subscription events
+router.post('/webhooks/stripe', express.raw({ type: 'application/json' }), handleStripeWebhook);
 
-    const { data: call, error } = await supabase
-      .from('calls')
-      .select('*')
-      .eq('id', callId)
-      .single();
+// ============================================
+// BILLING ENDPOINTS
+// ============================================
 
-    if (error) {
-      console.error('Error fetching call:', error);
-      return res.status(404).json({ error: 'Call not found' });
-    }
+// Create checkout session (upgrade flow)
+router.post('/billing/checkout', createCheckoutSession);
 
-    return res.status(200).json({ call });
-  } catch (error) {
-    console.error('Error:', error);
-    return res.status(500).json({ error: error.message });
-  }
-}
+// Create customer portal session (manage subscription)
+router.post('/billing/portal', createPortalSession);
 
-module.exports = { getClientCalls, getCallDetail };
+// Get subscription status
+router.get('/billing/status/:client_id', getSubscriptionStatus);
+
+// ============================================
+// HEALTH CHECK
+// ============================================
+
+router.get('/health', (req, res) => {
+  res.json({ 
+    status: 'healthy',
+    timestamp: new Date().toISOString(),
+    version: '1.0.0'
+  });
+});
+
+module.exports = router;

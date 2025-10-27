@@ -28,6 +28,7 @@
     "node-fetch": "^2.7.0",
     "resend": "^6.1.2",
     "sitemapper": "^4.0.2",
+    "stripe": "^19.1.0",
     "telnyx": "^2.1.0"
   }
 }

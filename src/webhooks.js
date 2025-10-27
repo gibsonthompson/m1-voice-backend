@@ -6,6 +6,122 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_KEY
 );
 
+// ============================================
+// EMAIL HELPER FUNCTIONS
+// ============================================
+
+async function sendUsageWarningEmail(client, currentCalls, limit) {
+  try {
+    const response = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${process.env.RESEND_API_KEY}`
+      },
+      body: JSON.stringify({
+        from: 'CallBird <notifications@callbirdai.com>',
+        to: [client.email],
+        subject: '⚠️ CallBird: 80% of Monthly Calls Used',
+        html: `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+            <h2 style="color: #F59E0B;">You're approaching your call limit</h2>
+            <p>Hi ${client.contact_name || client.business_name},</p>
+            <p>You've used <strong>${currentCalls} of ${limit} calls</strong> (${Math.round((currentCalls/limit)*100)}%) this month.</p>
+            
+            <div style="background: #FEF3C7; border-left: 4px solid #F59E0B; padding: 16px; margin: 20px 0;">
+              <p style="margin: 0;"><strong>📊 Usage: ${currentCalls}/${limit} calls</strong></p>
+            </div>
+
+            <p><strong>Upgrade to avoid service interruption:</strong></p>
+            <ul>
+              <li><strong>Growth:</strong> $79/month - 500 calls</li>
+              <li><strong>Pro:</strong> $199/month - 2000 calls</li>
+            </ul>
+
+            <div style="text-align: center; margin: 30px 0;">
+              <a href="https://callbird-dashboard.vercel.app/billing" 
+                 style="background: #111D96; color: white; padding: 12px 32px; text-decoration: none; border-radius: 6px; display: inline-block; font-weight: bold;">
+                Upgrade Plan
+              </a>
+            </div>
+
+            <p style="color: #666; font-size: 14px;">Your plan resets at the start of next month.</p>
+          </div>
+        `
+      })
+    });
+
+    if (response.ok) {
+      console.log('✅ Usage warning email sent');
+      return true;
+    } else {
+      console.error('❌ Failed to send usage warning email');
+      return false;
+    }
+  } catch (error) {
+    console.error('❌ Failed to send usage warning email:', error);
+    return false;
+  }
+}
+
+async function sendLimitReachedEmail(client, limit) {
+  try {
+    const response = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${process.env.RESEND_API_KEY}`
+      },
+      body: JSON.stringify({
+        from: 'CallBird <notifications@callbirdai.com>',
+        to: [client.email],
+        subject: '🚨 CallBird: Monthly Call Limit Reached',
+        html: `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+            <h2 style="color: #dc2626;">You've reached your monthly call limit</h2>
+            <p>Hi ${client.contact_name || client.business_name},</p>
+            <p>You've used all <strong>${limit} calls</strong> included in your current plan.</p>
+            
+            <div style="background: #FEF2F2; border-left: 4px solid #dc2626; padding: 16px; margin: 20px 0;">
+              <p style="margin: 0; color: #991b1b;"><strong>⚠️ Additional calls may be limited or blocked</strong></p>
+            </div>
+
+            <p><strong>Upgrade now to handle more calls:</strong></p>
+            <ul>
+              <li><strong>Growth:</strong> $79/month - 500 calls</li>
+              <li><strong>Pro:</strong> $199/month - 2000 calls</li>
+            </ul>
+
+            <div style="text-align: center; margin: 30px 0;">
+              <a href="https://callbird-dashboard.vercel.app/billing" 
+                 style="background: #dc2626; color: white; padding: 14px 36px; text-decoration: none; border-radius: 6px; display: inline-block; font-weight: bold; font-size: 16px;">
+                Upgrade Now
+              </a>
+            </div>
+
+            <p style="color: #666; font-size: 14px;">Your call count resets at the start of next billing cycle.</p>
+          </div>
+        `
+      })
+    });
+
+    if (response.ok) {
+      console.log('✅ Limit reached email sent');
+      return true;
+    } else {
+      console.error('❌ Failed to send limit reached email');
+      return false;
+    }
+  } catch (error) {
+    console.error('❌ Failed to send limit reached email:', error);
+    return false;
+  }
+}
+
+// ============================================
+// PHONE & GHL HELPER FUNCTIONS
+// ============================================
+
 // Helper: Format phone number to E.164 format
 function formatPhoneE164(phone) {
   if (!phone) return null;
@@ -198,6 +314,10 @@ async function sendGHLSMS(toPhone, message, businessOwnerName = null) {
   }
 }
 
+// ============================================
+// TRANSCRIPT EXTRACTION FUNCTIONS
+// ============================================
+
 // Extract customer name from transcript
 function extractCustomerName(transcript) {
   const patterns = [
@@ -261,7 +381,10 @@ function detectUrgency(transcript) {
   return 'NORMAL';
 }
 
-// Main webhook handler
+// ============================================
+// MAIN WEBHOOK HANDLER
+// ============================================
+
 async function handleVapiWebhook(req, res) {
   try {
     console.log('📞 VAPI webhook received');
@@ -369,7 +492,50 @@ async function handleVapiWebhook(req, res) {
       
       console.log('✅ Call saved successfully');
 
-      // Send SMS notification via GHL
+      // ============================================
+      // TRACK CALL USAGE & CHECK LIMITS
+      // ============================================
+      console.log('📊 Tracking call usage...');
+
+      try {
+        // Increment call counter
+        const newCallCount = (client.calls_this_month || 0) + 1;
+        
+        await supabase
+          .from('clients')
+          .update({ calls_this_month: newCallCount })
+          .eq('id', client.id);
+
+        console.log(`✅ Call count updated: ${newCallCount}/${client.monthly_call_limit}`);
+
+        // Check if approaching limit (80%)
+        const usagePercent = (newCallCount / client.monthly_call_limit) * 100;
+
+        if (usagePercent >= 80 && usagePercent < 100) {
+          console.log(`⚠️ Client ${client.email} at ${usagePercent.toFixed(0)}% of call limit`);
+          
+          // Send warning email at exactly 80%
+          if (newCallCount === Math.floor(client.monthly_call_limit * 0.8)) {
+            await sendUsageWarningEmail(client, newCallCount, client.monthly_call_limit);
+          }
+        }
+
+        // Check if limit reached (100%)
+        if (newCallCount >= client.monthly_call_limit) {
+          console.log(`🚨 Client ${client.email} reached call limit!`);
+          
+          // Send limit reached email (only once at exactly the limit)
+          if (newCallCount === client.monthly_call_limit) {
+            await sendLimitReachedEmail(client, client.monthly_call_limit);
+          }
+        }
+      } catch (usageError) {
+        console.error('⚠️ Usage tracking error (non-blocking):', usageError.message);
+      }
+
+      // ============================================
+      // SEND SMS NOTIFICATION
+      // ============================================
       let smsSent = false;
       
       if (client.owner_phone) {
@@ -421,6 +587,7 @@ async function handleVapiWebhook(req, res) {
         saved: true,
         callId: insertedCall[0]?.id,
         smsSent: smsSent,
+        usageTracked: true,
         extractedData: {
           customerName,
           customerPhone,
