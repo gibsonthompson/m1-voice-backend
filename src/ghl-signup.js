@@ -1,6 +1,7 @@
 const { createClient } = require('@supabase/supabase-js');
 const fetch = require('node-fetch');
 const { createKnowledgeBaseFromWebsite } = require('./website-scraper');
+const { provisionLocalPhone } = require('./phone-provisioning'); // NEW
 
 // Initialize Supabase with SERVICE KEY
 const supabase = createClient(
@@ -29,14 +30,6 @@ function formatPhoneE164(phone) {
   if (digits.length === 10) return `+1${digits}`;
   if (digits.length === 11 && digits[0] === '1') return `+${digits}`;
   return `+${digits}`;
-}
-
-// Validate area code (must be 3 digits)
-function validateAreaCode(areaCode) {
-  if (!areaCode) return '404'; // Default
-  const cleaned = String(areaCode).replace(/\D/g, '');
-  if (cleaned.length === 3) return cleaned;
-  return '404'; // Fallback if invalid
 }
 
 // Create VAPI assistant with knowledge base
@@ -130,35 +123,6 @@ async function createVAPIAssistant(businessName, industry, websiteUrl) {
   }
 }
 
-// Purchase VAPI phone number with specified area code
-async function provisionVAPIPhone(assistantId, areaCode) {
-  const validAreaCode = validateAreaCode(areaCode);
-  
-  console.log(`📞 Purchasing phone number with area code: ${validAreaCode}`);
-  
-  const buyResponse = await fetch('https://api.vapi.ai/phone-number/buy', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${process.env.VAPI_API_KEY}`,
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({
-      areaCode: validAreaCode,
-      name: `Assistant Phone`,
-      assistantId: assistantId
-    })
-  });
-  
-  if (!buyResponse.ok) {
-    const errorText = await buyResponse.text();
-    throw new Error(`Failed to buy phone number: ${errorText}`);
-  }
-  
-  const phoneData = await buyResponse.json();
-  console.log(`✅ Phone number purchased: ${phoneData.number}`);
-  return phoneData.number;
-}
-
 // Main GHL signup handler
 async function handleGHLSignup(req, res) {
   try {
@@ -180,7 +144,10 @@ async function handleGHLSignup(req, res) {
     const phone = req.body.phone || req.body.owner_phone;
     const email = req.body.email;
     const industry = req.body.industry;
-    const areaCode = req.body.areaCode || req.body.preferred_area_code || '404';
+    
+    // NEW: Extract city and state
+    const businessCity = req.body.businessCity || req.body.business_city;
+    const businessState = req.body.businessState || req.body.business_state;
 
     console.log('📋 Parsed fields:');
     console.log(`   Business: ${businessName}`);
@@ -189,17 +156,30 @@ async function handleGHLSignup(req, res) {
     console.log(`   Phone: ${phone}`);
     console.log(`   Website: ${websiteUrl || 'none'}`);
     console.log(`   Industry: ${industry}`);
-    console.log(`   Area Code: ${areaCode}`);
+    console.log(`   City: ${businessCity}`);  // NEW
+    console.log(`   State: ${businessState}`); // NEW
 
     // Validate required fields
     if (!businessName || !phone || !email) {
       console.error('❌ Missing required fields');
       return res.status(400).json({ 
         error: 'Missing required fields',
-        required: ['businessName (or business_name)', 'phone (or owner_phone)', 'email'],
+        required: ['businessName', 'phone', 'email'],
         received: req.body
       });
     }
+
+    // NEW: Validate city and state
+    if (!businessCity || !businessState) {
+      console.error('❌ Missing city or state');
+      return res.status(400).json({ 
+        error: 'Missing required fields',
+        required: ['businessCity', 'businessState'],
+        received: req.body
+      });
+    }
+
+    console.log(`🚀 Starting signup: ${businessName} | ${businessCity}, ${businessState}`);
 
     // Check for duplicate
     const { data: existing, error: dupError } = await supabase
@@ -223,8 +203,15 @@ async function handleGHLSignup(req, res) {
     // Step 1: Create VAPI assistant with knowledge base
     const assistant = await createVAPIAssistant(businessName, industry, websiteUrl);
 
-    // Step 2: Provision phone number
-    const phoneNumber = await provisionVAPIPhone(assistant.id, areaCode);
+    // Step 2: Provision LOCAL phone number based on city/state
+    const phoneData = await provisionLocalPhone(
+      businessCity,
+      businessState,
+      assistant.id,
+      businessName
+    );
+    
+    console.log(`✅ Phone provisioned: ${phoneData.number}`);
 
     // Step 3: Create client record with TRIAL fields
     const trialEndsAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days from now
@@ -233,13 +220,16 @@ async function handleGHLSignup(req, res) {
       .from('clients')
       .insert({
         business_name: businessName,
-        phone_number: phoneNumber,
+        business_city: businessCity,           // NEW
+        business_state: businessState,         // NEW
+        phone_number: phoneData.number,
+        phone_area_code: phoneData.number.substring(2, 5), // NEW
         owner_name: ownerName || null,
         owner_phone: formattedOwnerPhone,
         email,
         industry: industry || 'general',
         vapi_assistant_id: assistant.id,
-        vapi_phone_number: phoneNumber,
+        vapi_phone_number: phoneData.number,
         knowledge_base_id: assistant.model.knowledgeBaseId || null,
         
         // TRIAL FIELDS
@@ -259,7 +249,8 @@ async function handleGHLSignup(req, res) {
     }
 
     console.log(`🎉 Client created successfully: ${newClient.business_name}`);
-    console.log(`📞 Phone: ${phoneNumber}`);
+    console.log(`📍 Location: ${businessCity}, ${businessState}`);
+    console.log(`📞 Phone: ${phoneData.number}`);
     console.log(`🆔 Client ID: ${newClient.id}`);
     console.log(`⏰ Trial ends: ${newClient.trial_ends_at}`);
 
@@ -303,7 +294,8 @@ async function handleGHLSignup(req, res) {
       client: {
         id: newClient.id,
         business_name: newClient.business_name,
-        phone_number: phoneNumber,
+        phone_number: phoneData.number,
+        location: `${businessCity}, ${businessState}`,
         trial_ends_at: newClient.trial_ends_at,
         subscription_status: 'trial'
       }
