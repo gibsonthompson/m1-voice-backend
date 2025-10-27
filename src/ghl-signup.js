@@ -293,7 +293,7 @@ async function handleGHLSignup(req, res) {
     
     try {
       const { data: emailData, error: emailError } = await resend.emails.send({
-        from: 'CallBird <onboarding@callbird.ai>',
+        from: 'CallBird <onboarding@callbirdai.com>',
         to: email,
         subject: 'Welcome to CallBird - Set Your Password',
         html: `
@@ -302,7 +302,7 @@ async function handleGHLSignup(req, res) {
           <p><strong>Your Phone Number:</strong> ${phoneData.number}</p>
           <p><strong>Location:</strong> ${businessCity}, ${businessState}</p>
           <p>Set your password to access your dashboard:</p>
-          <p><a href="https://app.callbird.ai/set-password?client=${newClient.id}" style="background:#0066cc;color:white;padding:12px 24px;text-decoration:none;border-radius:4px;display:inline-block;">Set Password</a></p>
+          <p><a href="https://app.callbirdai.com/set-password?client=${newClient.id}" style="background:#0066cc;color:white;padding:12px 24px;text-decoration:none;border-radius:4px;display:inline-block;">Set Password</a></p>
           <p>Your 7-day free trial has started. No credit card required.</p>
         `
       });
