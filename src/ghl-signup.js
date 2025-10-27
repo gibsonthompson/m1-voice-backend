@@ -122,11 +122,12 @@ async function createVAPIAssistant(businessName, industry, websiteUrl) {
   }
 }
 
-// Provision phone number with fallback
+// Provision phone number with area code preference
 async function provisionVAPIPhone(areaCode, assistantId) {
   try {
     console.log(`📞 Provisioning phone number with area code ${areaCode}...`);
 
+    // VAPI changed parameter name on Jan 29, 2025: areaCode → numberDesiredAreaCode
     const response = await fetch('https://api.vapi.ai/phone-number', {
       method: 'POST',
       headers: {
@@ -135,7 +136,7 @@ async function provisionVAPIPhone(areaCode, assistantId) {
       },
       body: JSON.stringify({
         provider: 'vapi',
-        areaCode: areaCode,
+        numberDesiredAreaCode: areaCode,  // Updated parameter name
         assistantId: assistantId,
         name: `CallBird ${areaCode}`
       })
@@ -144,12 +145,14 @@ async function provisionVAPIPhone(areaCode, assistantId) {
     if (!response.ok) {
       const error = await response.json();
       
-      // Try with VAPI-suggested area codes
-      if (error.message && error.message.includes('not available')) {
+      // Try with fallback area codes if preferred one unavailable
+      if (error.message && error.message.some(msg => msg.includes('area code'))) {
         console.log('⚠️ Area code unavailable, trying fallback...');
         const fallbackCodes = ['404', '678', '770', '470'];
         
         for (const code of fallbackCodes) {
+          if (code === areaCode) continue; // Skip the one we already tried
+          
           try {
             const retryResponse = await fetch('https://api.vapi.ai/phone-number', {
               method: 'POST',
@@ -159,7 +162,7 @@ async function provisionVAPIPhone(areaCode, assistantId) {
               },
               body: JSON.stringify({
                 provider: 'vapi',
-                areaCode: code,
+                numberDesiredAreaCode: code,
                 assistantId: assistantId,
                 name: `CallBird ${code}`
               })
@@ -176,6 +179,7 @@ async function provisionVAPIPhone(areaCode, assistantId) {
         }
       }
       
+      console.error('❌ VAPI phone provisioning failed:', error);
       throw new Error(`Failed to provision phone: ${JSON.stringify(error)}`);
     }
 
