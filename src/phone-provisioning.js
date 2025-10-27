@@ -2,13 +2,12 @@
 // LOCAL PHONE PROVISIONING WITH STATE FALLBACK
 // ============================================
 
-const { getAreaCodesForCity } = require('./city-area-codes');
+const { getAreaCodesForCity, stateAreaCodes } = require('./city-area-codes');
 
 async function provisionLocalPhone(city, state, assistantId, businessName) {
   console.log(`\n📞 Provisioning phone for ${businessName} in ${city}, ${state}`);
   
-  // Get city-specific codes and all state codes
-  const cityAreaCodes = require('./city-area-codes');
+  // Get local codes
   const localCodes = getAreaCodesForCity(city, state);
   
   if (localCodes.length === 0) {
@@ -37,20 +36,20 @@ async function provisionLocalPhone(city, state, assistantId, businessName) {
   // STEP 2: If all local codes failed, try ALL state codes
   console.log(`⚠️  All local codes unavailable. Trying all ${state} area codes...`);
   
-  // Import state codes
-  const { stateAreaCodes } = require('./city-area-codes');
-  const stateUpper = state.toUpperCase().length === 2 ? state.toUpperCase() : 
-    // Convert full name to abbreviation if needed
-    (state.toUpperCase() === 'GEORGIA' ? 'GA' : state.toUpperCase());
-  
+  const stateUpper = state.toUpperCase();
   const allStateCodes = stateAreaCodes[stateUpper] || [];
+  
+  if (allStateCodes.length === 0) {
+    throw new Error(`No area codes found for state: ${state}`);
+  }
   
   // Filter out codes we already tried
   const remainingCodes = allStateCodes.filter(code => !localCodes.includes(code));
   
   if (remainingCodes.length === 0) {
+    console.log(`⚠️  Already tried all ${state} area codes`);
     throw new Error(
-      `Failed to provision phone after trying all ${state} area codes`
+      `Failed to provision phone after trying all ${allStateCodes.length} ${state} area codes`
     );
   }
   
@@ -86,14 +85,13 @@ async function buyVAPIPhoneNumber(areaCode, assistantId, businessName) {
     throw new Error('VAPI_API_KEY not set in environment');
   }
   
-  const response = await fetch('https://api.vapi.ai/phone-number', {
+  const response = await fetch('https://api.vapi.ai/phone-number/buy', {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${VAPI_API_KEY}`,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      provider: 'twilio',
       areaCode: areaCode,
       name: `${businessName} - Business Line`,
       assistantId: assistantId,
