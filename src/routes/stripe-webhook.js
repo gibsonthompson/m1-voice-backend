@@ -1,5 +1,6 @@
 const { createClient } = require('@supabase/supabase-js');
 const Stripe = require('stripe');
+const { getPaymentConfirmationEmail } = require('../email-templates');
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 const supabase = createClient(
@@ -8,8 +9,10 @@ const supabase = createClient(
 );
 
 // Helper: Send email via Resend
-async function sendEmail(to, subject, html) {
+async function sendEmail(emailData) {
   try {
+    console.log(`📧 Sending email to ${emailData.to}...`);
+    
     const response = await fetch('https://api.resend.com/emails', {
       method: 'POST',
       headers: {
@@ -17,23 +20,25 @@ async function sendEmail(to, subject, html) {
         'Authorization': `Bearer ${process.env.RESEND_API_KEY}`
       },
       body: JSON.stringify({
-        from: 'CallBird <notifications@callbirdai.com>',
-        to: [to],
-        subject: subject,
-        html: html
+        from: 'CallBird AI <onboarding@callbirdai.com>',
+        to: [emailData.to],
+        subject: emailData.subject,
+        html: emailData.html
       })
     });
 
     if (!response.ok) {
       console.error('❌ Email send failed:', await response.text());
-      return false;
+      return { success: false };
     }
 
-    console.log('✅ Email sent successfully');
-    return true;
+    const result = await response.json();
+    console.log('✅ Email sent successfully:', result.id);
+    return { success: true, data: result };
+    
   } catch (error) {
     console.error('❌ Email error:', error);
-    return false;
+    return { success: false, error: error.message };
   }
 }
 
@@ -57,12 +62,66 @@ async function getClientByStripeCustomerId(customerId) {
 function getPlanDetails(priceId) {
   // Your actual Stripe Price IDs
   const plans = {
-    'price_1SLxCFECyXQyJHEs4qn05Zh9': { name: 'Starter', callLimit: 100 },
-    'price_1SLxBDECyXQyJHEsweVK4Qwh': { name: 'Professional', callLimit: 250 },
-    'price_1SLxC4ECyXQyJHEss4ctfu8c': { name: 'Enterprise', callLimit: 500 },
+    'price_1SLxCFECyXQyJHEs4qn05Zh9': { name: 'starter', callLimit: 100 },
+    'price_1SLxBDECyXQyJHEsweVK4Qwh': { name: 'professional', callLimit: 250 },
+    'price_1SLxC4ECyXQyJHEss4ctfu8c': { name: 'enterprise', callLimit: 500 },
   };
   
-  return plans[priceId] || { name: 'Starter', callLimit: 100 };
+  return plans[priceId] || { name: 'starter', callLimit: 100 };
+}
+
+// Helper: Re-enable VAPI assistant after payment
+async function reEnableVAPIAssistant(client) {
+  try {
+    console.log('🔊 Re-enabling VAPI assistant...');
+
+    // Restore the assistant's original functionality
+    const businessName = client.business_name;
+    const industry = client.industry || 'general';
+
+    // Generic professional prompt (you can customize based on industry)
+    const restoredPrompt = `You are a professional AI receptionist for ${businessName}.
+
+Your role is to:
+- Answer calls professionally and courteously
+- Provide information about the business
+- Take messages from customers
+- Collect customer contact information (name, phone, reason for calling)
+- Assess the urgency of inquiries
+
+Always be helpful, professional, and represent ${businessName} well.`;
+
+    const vapiUpdateResponse = await fetch(
+      `https://api.vapi.ai/assistant/${client.vapi_assistant_id}`,
+      {
+        method: 'PATCH',
+        headers: {
+          'Authorization': `Bearer ${process.env.VAPI_API_KEY}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          model: {
+            messages: [{
+              role: 'system',
+              content: restoredPrompt
+            }]
+          }
+        })
+      }
+    );
+
+    if (vapiUpdateResponse.ok) {
+      console.log('✅ VAPI assistant re-enabled successfully');
+      return true;
+    } else {
+      console.error('❌ Failed to re-enable VAPI assistant:', await vapiUpdateResponse.text());
+      return false;
+    }
+
+  } catch (error) {
+    console.error('❌ Error re-enabling VAPI assistant:', error);
+    return false;
+  }
 }
 
 // Handle: checkout.session.completed (NEW - for GHL checkout)
@@ -108,6 +167,11 @@ async function handleCheckoutCompleted(session) {
       return;
     }
     
+    // Re-enable VAPI assistant if it was suspended
+    if (client.status === 'suspended' && client.vapi_assistant_id) {
+      await reEnableVAPIAssistant(client);
+    }
+    
     // Log event
     await supabase.from('subscription_events').insert({
       client_id: client.id,
@@ -122,23 +186,29 @@ async function handleCheckoutCompleted(session) {
       status: 'active'
     });
     
-    // Send confirmation email
-    await sendEmail(
-      client.email,
-      'Welcome to CallBird - Subscription Active!',
-      `
-        <h2>Your CallBird subscription is now active!</h2>
-        <p>Hi ${client.owner_name || client.business_name},</p>
-        <p>Thank you for subscribing to CallBird ${planDetails.name} plan.</p>
-        <p><strong>Plan Details:</strong></p>
-        <ul>
-          <li>Monthly call limit: ${planDetails.callLimit} calls</li>
-          <li>AI Phone: ${client.vapi_phone_number}</li>
-        </ul>
-        <p>Your AI receptionist is ready to take calls!</p>
-        <p><a href="https://app.callbirdai.com">View Dashboard</a></p>
-      `
-    );
+    // Send payment confirmation email with branded template
+    const clientData = {
+      business_name: client.business_name,
+      first_name: client.owner_name || '',
+      email: client.email,
+      phone_number: client.vapi_phone_number,
+      plan_type: planDetails.name
+    };
+
+    const emailData = getPaymentConfirmationEmail(clientData);
+    const emailResult = await sendEmail(emailData);
+
+    // Log the email
+    if (emailResult.success) {
+      await supabase.from('email_logs').insert([{
+        client_id: client.id,
+        email_type: 'payment_confirmation',
+        recipient_email: client.email,
+        sent_at: new Date().toISOString(),
+        status: 'sent',
+        resend_id: emailResult.data?.id
+      }]);
+    }
     
   } catch (error) {
     console.error('❌ Error handling checkout:', error);
@@ -186,24 +256,6 @@ async function handleSubscriptionCreated(subscription) {
   });
 
   console.log('✅ Subscription created for client:', client.business_name);
-
-  // Send confirmation email
-  await sendEmail(
-    client.email,
-    'Welcome to CallBird - Subscription Active!',
-    `
-      <h2>Your CallBird subscription is now active!</h2>
-      <p>Hi ${client.owner_name || client.business_name},</p>
-      <p>Thank you for subscribing to CallBird ${planDetails.name} plan.</p>
-      <p><strong>Plan Details:</strong></p>
-      <ul>
-        <li>Monthly call limit: ${planDetails.callLimit} calls</li>
-        <li>AI Phone: ${client.vapi_phone_number}</li>
-      </ul>
-      <p>Your AI receptionist is ready to take calls!</p>
-      <p><a href="https://app.callbirdai.com">View Dashboard</a></p>
-    `
-  );
 }
 
 // Handle: customer.subscription.updated
@@ -267,18 +319,18 @@ async function handleSubscriptionDeleted(subscription) {
 
   console.log('✅ Subscription cancelled for:', client.business_name);
 
-  // Send cancellation email
-  await sendEmail(
-    client.email,
-    'CallBird Subscription Cancelled',
-    `
+  // Send cancellation email (simple version - can use template later)
+  await sendEmail({
+    to: client.email,
+    subject: 'CallBird Subscription Cancelled',
+    html: `
       <h2>Your subscription has been cancelled</h2>
       <p>Hi ${client.owner_name || client.business_name},</p>
       <p>Your CallBird subscription has been cancelled. Your AI receptionist will stop taking calls at the end of your billing period.</p>
       <p>We're sorry to see you go! If you'd like to reactivate, you can do so anytime from your dashboard.</p>
       <p><a href="https://app.callbirdai.com">Reactivate Subscription</a></p>
     `
-  );
+  });
 }
 
 // Handle: invoice.payment_succeeded
@@ -316,17 +368,17 @@ async function handlePaymentSucceeded(invoice) {
   console.log('✅ Payment logged for:', client.business_name);
 
   // Send receipt email
-  await sendEmail(
-    client.email,
-    'CallBird Payment Receipt',
-    `
+  await sendEmail({
+    to: client.email,
+    subject: 'CallBird Payment Receipt',
+    html: `
       <h2>Payment Received - Thank You!</h2>
       <p>Hi ${client.owner_name || client.business_name},</p>
       <p>We've successfully processed your payment of $${(invoice.amount_paid / 100).toFixed(2)}.</p>
       <p>Your CallBird subscription remains active.</p>
       <p><a href="${invoice.hosted_invoice_url}">View Invoice</a></p>
     `
-  );
+  });
 }
 
 // Handle: invoice.payment_failed
@@ -364,10 +416,10 @@ async function handlePaymentFailed(invoice) {
   console.log('⚠️ Payment failed for:', client.business_name);
 
   // Send urgent email
-  await sendEmail(
-    client.email,
-    '🚨 CallBird Payment Failed - Action Required',
-    `
+  await sendEmail({
+    to: client.email,
+    subject: '🚨 CallBird Payment Failed - Action Required',
+    html: `
       <h2>Payment Failed - Update Your Payment Method</h2>
       <p>Hi ${client.owner_name || client.business_name},</p>
       <p><strong>We were unable to process your payment of $${(invoice.amount_due / 100).toFixed(2)}.</strong></p>
@@ -381,7 +433,7 @@ async function handlePaymentFailed(invoice) {
       <p><a href="${invoice.hosted_invoice_url}" style="background: #111D96; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block;">Update Payment Method</a></p>
       <p style="color: #dc2626; margin-top: 20px;"><strong>Act now to avoid service interruption!</strong></p>
     `
-  );
+  });
 }
 
 // Handle: customer.subscription.trial_will_end
@@ -403,10 +455,10 @@ async function handleTrialWillEnd(subscription) {
   });
 
   // Send reminder email
-  await sendEmail(
-    client.email,
-    `⏰ Your CallBird Trial Ends in ${daysLeft} Days`,
-    `
+  await sendEmail({
+    to: client.email,
+    subject: `⏰ Your CallBird Trial Ends in ${daysLeft} Days`,
+    html: `
       <h2>Your trial is ending soon</h2>
       <p>Hi ${client.owner_name || client.business_name},</p>
       <p>Your 7-day CallBird trial ends in <strong>${daysLeft} days</strong> on ${trialEnd.toLocaleDateString()}.</p>
@@ -414,7 +466,7 @@ async function handleTrialWillEnd(subscription) {
       <p>Upgrade now to keep your calls flowing smoothly.</p>
       <p><a href="https://app.callbirdai.com" style="background: #111D96; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block;">Upgrade Now</a></p>
     `
-  );
+  });
 }
 
 // Main webhook handler
