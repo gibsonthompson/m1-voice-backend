@@ -83,10 +83,10 @@ async function sendLimitReachedEmail(client, limit) {
             <p>You've used all <strong>${limit} calls</strong> included in your current plan.</p>
             
             <div style="background: #FEF2F2; border-left: 4px solid #dc2626; padding: 16px; margin: 20px 0;">
-              <p style="margin: 0; color: #991b1b;"><strong>⚠️ Additional calls may be limited or blocked</strong></p>
+              <p style="margin: 0; color: #991b1b;"><strong>⚠️ Additional calls are now being blocked</strong></p>
             </div>
 
-            <p><strong>Upgrade now to handle more calls:</strong></p>
+            <p><strong>Upgrade now to resume service:</strong></p>
             <ul>
               <li><strong>Growth:</strong> $79/month - 500 calls</li>
               <li><strong>Pro:</strong> $199/month - 2000 calls</li>
@@ -419,6 +419,42 @@ async function handleVapiWebhook(req, res) {
 
       console.log('✅ Client found:', client.business_name);
 
+      // ============================================
+      // 🆕 HARD BLOCK: CHECK CALL LIMITS BEFORE PROCESSING
+      // ============================================
+      const currentCallCount = client.calls_this_month || 0;
+      const callLimit = client.monthly_call_limit || 100;
+
+      console.log(`📊 Current usage: ${currentCallCount}/${callLimit} calls`);
+
+      if (currentCallCount >= callLimit) {
+        console.log(`🚫 CALL BLOCKED: ${client.business_name} has reached limit`);
+        console.log(`   Usage: ${currentCallCount}/${callLimit}`);
+        console.log(`   Plan: ${client.plan_type}`);
+        
+        // Send limit reached email if this is the first blocked call
+        if (currentCallCount === callLimit) {
+          console.log('📧 Sending limit reached notification...');
+          await sendLimitReachedEmail(client, callLimit);
+        }
+        
+        // Return success to VAPI but don't process the call
+        return res.status(200).json({ 
+          received: true,
+          blocked: true,
+          reason: 'Monthly call limit reached',
+          currentUsage: currentCallCount,
+          limit: callLimit,
+          message: `Client ${client.business_name} has used all ${callLimit} calls for this billing period`
+        });
+      }
+
+      console.log(`✅ Within limit, processing call...`);
+
+      // ============================================
+      // CONTINUE WITH NORMAL CALL PROCESSING
+      // ============================================
+
       const transcript = message.transcript || '';
       const callerPhone = call.customer?.number || 'Unknown';
       
@@ -499,34 +535,34 @@ async function handleVapiWebhook(req, res) {
 
       try {
         // Increment call counter
-        const newCallCount = (client.calls_this_month || 0) + 1;
+        const newCallCount = currentCallCount + 1;
         
         await supabase
           .from('clients')
           .update({ calls_this_month: newCallCount })
           .eq('id', client.id);
 
-        console.log(`✅ Call count updated: ${newCallCount}/${client.monthly_call_limit}`);
+        console.log(`✅ Call count updated: ${newCallCount}/${callLimit}`);
 
         // Check if approaching limit (80%)
-        const usagePercent = (newCallCount / client.monthly_call_limit) * 100;
+        const usagePercent = (newCallCount / callLimit) * 100;
 
         if (usagePercent >= 80 && usagePercent < 100) {
           console.log(`⚠️ Client ${client.email} at ${usagePercent.toFixed(0)}% of call limit`);
           
           // Send warning email at exactly 80%
-          if (newCallCount === Math.floor(client.monthly_call_limit * 0.8)) {
-            await sendUsageWarningEmail(client, newCallCount, client.monthly_call_limit);
+          if (newCallCount === Math.floor(callLimit * 0.8)) {
+            await sendUsageWarningEmail(client, newCallCount, callLimit);
           }
         }
 
-        // Check if limit reached (100%)
-        if (newCallCount >= client.monthly_call_limit) {
+        // Check if limit just reached (100%)
+        if (newCallCount >= callLimit) {
           console.log(`🚨 Client ${client.email} reached call limit!`);
           
           // Send limit reached email (only once at exactly the limit)
-          if (newCallCount === client.monthly_call_limit) {
-            await sendLimitReachedEmail(client, client.monthly_call_limit);
+          if (newCallCount === callLimit) {
+            await sendLimitReachedEmail(client, callLimit);
           }
         }
       } catch (usageError) {
