@@ -3,7 +3,7 @@
 
 function getTrialReminderEmail(clientData, daysLeft) {
   const { business_name, first_name, email, phone_number } = clientData;
-  const upgradeUrl = 'https://callbirdai.com/upgrade'; // Your GHL checkout URL
+  const upgradeUrl = 'https://start.callbirdai.com/thank-you';
   
   let subject, headline, message;
   
@@ -178,7 +178,7 @@ function getTrialReminderEmail(clientData, daysLeft) {
       </div>
 
       <p style="font-size: 14px; color: #666; margin-top: 30px;">
-        Questions? Reply to this email or visit <a href="https://callbirdai.com" style="color: #667eea;">callbirdai.com</a>
+        Questions? Text us at <strong><a href="sms:+15055573160" style="color: #667eea; text-decoration: none;">(505) 557-3160</a></strong> or visit <a href="https://callbirdai.com" style="color: #667eea;">callbirdai.com</a>
       </p>
     </div>
 
@@ -186,8 +186,7 @@ function getTrialReminderEmail(clientData, daysLeft) {
       <p>CallBird AI - Your 24/7 Phone Receptionist</p>
       <p>
         <a href="https://callbirdai.com">Website</a> • 
-        <a href="https://app.callbirdai.com">Dashboard</a> • 
-        <a href="sms:5055573160">Support: (505) 557-3160</a>
+        <a href="https://app.callbirdai.com">Dashboard</a>
       </p>
     </div>
   </div>
@@ -199,7 +198,7 @@ function getTrialReminderEmail(clientData, daysLeft) {
 
 function getTrialExpiredEmail(clientData) {
   const { business_name, first_name, email, phone_number } = clientData;
-  const upgradeUrl = 'https://callbirdai.com/upgrade';
+  const upgradeUrl = 'https://start.callbirdai.com/thank-you';
 
   return {
     to: email,
@@ -208,9 +207,8 @@ function getTrialExpiredEmail(clientData) {
 <!DOCTYPE html>
 <html>
 <head>
-  <meta charset="utf-8">
+  <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Trial Ended</title>
   <style>
     body {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
@@ -226,13 +224,13 @@ function getTrialExpiredEmail(clientData) {
       background: white;
       border-radius: 12px;
       overflow: hidden;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+      box-shadow: 0 4px 6px rgba(0,0,0,0.1);
     }
     .header {
-      background: #ff6b6b;
-      padding: 40px 20px;
-      text-align: center;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
       color: white;
+      padding: 40px 30px;
+      text-align: center;
     }
     .header h1 {
       margin: 0;
@@ -245,65 +243,64 @@ function getTrialExpiredEmail(clientData) {
     .alert-box {
       background: #fff3cd;
       border: 2px solid #ffc107;
-      padding: 20px;
-      margin: 25px 0;
       border-radius: 8px;
+      padding: 20px;
+      margin: 30px 0;
       text-align: center;
     }
     .alert-box h3 {
-      margin-top: 0;
-      color: #ff6b6b;
-      font-size: 24px;
+      color: #856404;
+      margin: 0 0 10px 0;
+      font-size: 20px;
+    }
+    .alert-box p {
+      color: #856404;
+      margin: 0;
+      font-size: 16px;
     }
     .cta-button {
       display: inline-block;
       background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
       color: white;
-      padding: 18px 50px;
       text-decoration: none;
+      padding: 16px 40px;
       border-radius: 8px;
-      font-size: 20px;
       font-weight: 600;
-      margin: 25px 0;
-      box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
-    }
-    .pricing {
-      display: flex;
-      gap: 20px;
+      font-size: 18px;
       margin: 30px 0;
-      flex-wrap: wrap;
+      transition: transform 0.2s;
     }
-    .plan {
-      flex: 1;
-      min-width: 150px;
+    .cta-button:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 12px rgba(102, 126, 234, 0.4);
+    }
+    .phone-number {
       background: #f8f9fa;
-      padding: 20px;
+      padding: 15px;
       border-radius: 8px;
-      text-align: center;
-      border: 2px solid #e9ecef;
-    }
-    .plan.popular {
-      border-color: #667eea;
-      background: #f0f4ff;
-    }
-    .plan-name {
-      font-weight: 600;
-      color: #667eea;
-      margin-bottom: 10px;
-    }
-    .plan-price {
-      font-size: 32px;
+      font-family: 'Courier New', monospace;
+      font-size: 18px;
       font-weight: bold;
+      color: #667eea;
+      margin: 20px 0;
+      text-align: center;
+    }
+    .pricing-info {
+      background: #f8f9fa;
+      padding: 25px;
+      border-radius: 8px;
+      margin: 30px 0;
+    }
+    .pricing-info h3 {
+      margin-top: 0;
       color: #333;
+      text-align: center;
     }
-    .plan-price span {
+    .pricing-info p {
+      color: #555;
       font-size: 16px;
-      color: #666;
-    }
-    .plan-calls {
-      color: #666;
-      font-size: 14px;
-      margin-top: 5px;
+      margin: 10px 0;
+      text-align: center;
     }
     .footer {
       background: #f8f9fa;
@@ -313,12 +310,16 @@ function getTrialExpiredEmail(clientData) {
       font-size: 14px;
       border-top: 1px solid #e9ecef;
     }
+    .footer a {
+      color: #667eea;
+      text-decoration: none;
+    }
   </style>
 </head>
 <body>
   <div class="container">
     <div class="header">
-      <h1>⏰ Your Trial Has Ended</h1>
+      <h1>⏰ Your 7-Day Trial is Complete</h1>
     </div>
     
     <div class="content">
@@ -327,38 +328,27 @@ function getTrialExpiredEmail(clientData) {
       </p>
 
       <div class="alert-box">
-        <h3>Your 7-Day Trial is Complete</h3>
-        <p style="margin: 0; color: #666;">
-          Your AI receptionist is currently <strong>paused</strong>. Incoming calls will not be answered until you upgrade.
+        <h3>Your AI Receptionist is Currently Paused</h3>
+        <p>
+          Incoming calls will not be answered until you upgrade.
         </p>
       </div>
 
-      <p style="font-size: 16px; color: #555;">
-        Your CallBird phone number <strong>${phone_number || ''}</strong> is reserved for you, but it's not currently active.
+      <p style="font-size: 16px; color: #555; margin: 25px 0;">
+        Your CallBird phone number is reserved for you, but it's not currently active:
       </p>
 
-      <p style="font-size: 16px; color: #555;">
-        <strong>Upgrade now to reactivate your AI receptionist and never miss another call!</strong>
+      <div class="phone-number">
+        ${phone_number || ''}
+      </div>
+
+      <p style="font-size: 18px; color: #333; font-weight: 600; margin: 30px 0 20px 0;">
+        Upgrade now to reactivate your AI receptionist and never miss another call!
       </p>
 
-      <h3 style="color: #333; margin-top: 30px;">Choose Your Plan:</h3>
-      
-      <div class="pricing">
-        <div class="plan">
-          <div class="plan-name">Starter</div>
-          <div class="plan-price">$49<span>/mo</span></div>
-          <div class="plan-calls">100 calls/month</div>
-        </div>
-        <div class="plan popular">
-          <div class="plan-name">⭐ Professional</div>
-          <div class="plan-price">$99<span>/mo</span></div>
-          <div class="plan-calls">250 calls/month</div>
-        </div>
-        <div class="plan">
-          <div class="plan-name">Enterprise</div>
-          <div class="plan-price">$199<span>/mo</span></div>
-          <div class="plan-calls">500 calls/month</div>
-        </div>
+      <div class="pricing-info">
+        <h3>Plans Starting at $49/month</h3>
+        <p><strong>Starter:</strong> $49/mo (100 calls) • <strong>Professional:</strong> $99/mo (250 calls) • <strong>Enterprise:</strong> $199/mo (500 calls)</p>
       </div>
 
       <div style="text-align: center;">
@@ -367,14 +357,14 @@ function getTrialExpiredEmail(clientData) {
         </a>
       </div>
 
-      <p style="font-size: 14px; color: #666; margin-top: 30px; text-align: center;">
-        Need help deciding? Text us: <strong>(505) 557-3160</strong>
+      <p style="font-size: 14px; color: #666; margin-top: 40px; text-align: center; border-top: 1px solid #e9ecef; padding-top: 20px;">
+        Need help deciding? Text us: <strong><a href="sms:+15055573160" style="color: #667eea; text-decoration: none;">(505) 557-3160</a></strong>
       </p>
     </div>
 
     <div class="footer">
-      <p>CallBird AI - Never Miss Another Call</p>
-      <p>callbirdai.com</p>
+      <p style="margin: 0 0 10px 0;"><strong>CallBird AI</strong> - Never Miss Another Call</p>
+      <p style="margin: 0;"><a href="https://callbirdai.com">callbirdai.com</a></p>
     </div>
   </div>
 </body>
@@ -511,6 +501,10 @@ function getPaymentConfirmationEmail(clientData) {
       font-size: 14px;
       border-top: 1px solid #e9ecef;
     }
+    .footer a {
+      color: #667eea;
+      text-decoration: none;
+    }
   </style>
 </head>
 <body>
@@ -568,15 +562,15 @@ function getPaymentConfirmationEmail(clientData) {
       </p>
 
       <p style="font-size: 14px; color: #666; margin-top: 30px;">
-        Questions? We're here to help! Text us at <strong>(505) 557-3160</strong> or reply to this email.
+        Questions? We're here to help! Text us at <strong><a href="sms:+15055573160" style="color: #667eea; text-decoration: none;">(505) 557-3160</a></strong> or reply to this email.
       </p>
     </div>
 
     <div class="footer">
       <p><strong>CallBird AI</strong> - Your 24/7 Phone Receptionist</p>
       <p>
-        <a href="https://app.callbirdai.com" style="color: #667eea; text-decoration: none;">Dashboard</a> • 
-        <a href="https://callbirdai.com" style="color: #667eea; text-decoration: none;">Website</a>
+        <a href="https://app.callbirdai.com">Dashboard</a> • 
+        <a href="https://callbirdai.com">Website</a>
       </p>
     </div>
   </div>
