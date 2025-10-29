@@ -211,29 +211,41 @@ async function handleExpiredTrial(client, clientData) {
     if (client.vapi_assistant_id) {
       console.log('🔇 Disabling VAPI assistant...');
       
-      const vapiResponse = await fetch(
-        `https://api.vapi.ai/assistant/${client.vapi_assistant_id}`,
-        {
-          method: 'PATCH',
-          headers: {
-            'Authorization': `Bearer ${process.env.VAPI_API_KEY}`,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            model: {
-              messages: [{
-                role: 'system',
-                content: `You are an automated message system. When someone calls, say: "Thank you for calling ${client.business_name}. This CallBird account is currently on hold. Please contact the business owner directly. If you're the owner, please visit your CallBird dashboard at app.callbirdai.com to reactivate your subscription. Goodbye." Then end the call immediately.`
-              }]
-            }
-          })
-        }
-      );
+      try {
+        const vapiResponse = await fetch(
+          `https://api.vapi.ai/assistant/${client.vapi_assistant_id}`,
+          {
+            method: 'PATCH',
+            headers: {
+              'Authorization': `Bearer ${process.env.VAPI_API_KEY}`,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              model: {
+                messages: [{
+                  role: 'system',
+                  content: `You are an automated message system. When someone calls, say: "Thank you for calling ${client.business_name}. This CallBird account is currently on hold. Please contact the business owner directly. If you're the owner, please visit your CallBird dashboard at app.callbirdai.com to reactivate your subscription. Goodbye." Then end the call immediately.`
+                }]
+              }
+            })
+          }
+        );
 
-      if (vapiResponse.ok) {
-        console.log('✅ VAPI assistant disabled');
-      } else {
-        console.error('❌ Failed to disable VAPI assistant');
+        if (vapiResponse.ok) {
+          console.log('✅ VAPI assistant disabled');
+        } else {
+          const errorText = await vapiResponse.text();
+          console.error('❌ Failed to disable VAPI assistant:', {
+            status: vapiResponse.status,
+            statusText: vapiResponse.statusText,
+            error: errorText,
+            assistantId: client.vapi_assistant_id
+          });
+          // Continue anyway - don't block database updates
+        }
+      } catch (error) {
+        console.error('❌ VAPI assistant disable error:', error.message);
+        // Continue anyway - don't block database updates
       }
     }
 
