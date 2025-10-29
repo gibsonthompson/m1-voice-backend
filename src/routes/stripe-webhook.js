@@ -73,13 +73,12 @@ function getPlanDetails(priceId) {
 // Helper: Re-enable VAPI assistant after payment
 async function reEnableVAPIAssistant(client) {
   try {
-    console.log('🔊 Re-enabling VAPI assistant...');
+    console.log(`🔊 Re-enabling VAPI assistant: ${client.vapi_assistant_id}`);
 
     // Restore the assistant's original functionality
     const businessName = client.business_name;
-    const industry = client.industry || 'general';
 
-    // Generic professional prompt (you can customize based on industry)
+    // Professional prompt that restores full functionality
     const restoredPrompt = `You are a professional AI receptionist for ${businessName}.
 
 Your role is to:
@@ -114,7 +113,8 @@ Always be helpful, professional, and represent ${businessName} well.`;
       console.log('✅ VAPI assistant re-enabled successfully');
       return true;
     } else {
-      console.error('❌ Failed to re-enable VAPI assistant:', await vapiUpdateResponse.text());
+      const errorText = await vapiUpdateResponse.text();
+      console.error('❌ Failed to re-enable VAPI assistant:', errorText);
       return false;
     }
 
@@ -157,7 +157,6 @@ async function handleCheckoutCompleted(session) {
         monthly_call_limit: planDetails.callLimit,
         calls_this_month: 0,
         trial_ends_at: null,  // Clear trial date
-        // Removed 'status' update - has database constraint
         updated_at: new Date().toISOString()
       })
       .eq('id', client.id);
@@ -167,8 +166,11 @@ async function handleCheckoutCompleted(session) {
       return;
     }
     
-    // Re-enable VAPI assistant if it was suspended
-    if (client.status === 'suspended' && client.vapi_assistant_id) {
+    // ============================================
+    // 🆕 ALWAYS RE-ENABLE VAPI ASSISTANT AFTER PAYMENT
+    // ============================================
+    if (client.vapi_assistant_id) {
+      console.log('🔓 Re-enabling VAPI assistant after payment...');
       await reEnableVAPIAssistant(client);
     }
     
@@ -186,28 +188,40 @@ async function handleCheckoutCompleted(session) {
       status: 'active'
     });
     
-    // Send payment confirmation email with branded template
-    const clientData = {
-      business_name: client.business_name,
-      first_name: client.owner_name || '',
-      email: client.email,
-      phone_number: client.vapi_phone_number,
-      plan_type: planDetails.name
-    };
+    // ============================================
+    // 🆕 SEND PAYMENT CONFIRMATION EMAIL
+    // Using branded template from email-templates.js
+    // ============================================
+    console.log('📧 Sending payment confirmation email...');
+    
+    try {
+      const clientData = {
+        business_name: client.business_name,
+        first_name: client.owner_name || client.business_name,
+        email: client.email,
+        phone_number: client.vapi_phone_number,
+        plan_type: planDetails.name,
+        amount: (session.amount_total / 100).toFixed(2)
+      };
 
-    const emailData = getPaymentConfirmationEmail(clientData);
-    const emailResult = await sendEmail(emailData);
+      const emailData = getPaymentConfirmationEmail(clientData);
+      const emailResult = await sendEmail(emailData);
 
-    // Log the email
-    if (emailResult.success) {
-      await supabase.from('email_logs').insert([{
-        client_id: client.id,
-        email_type: 'payment_confirmation',
-        recipient_email: client.email,
-        sent_at: new Date().toISOString(),
-        status: 'sent',
-        resend_id: emailResult.data?.id
-      }]);
+      // Log the email
+      if (emailResult.success) {
+        await supabase.from('email_logs').insert([{
+          client_id: client.id,
+          email_type: 'payment_confirmation',
+          recipient_email: client.email,
+          sent_at: new Date().toISOString(),
+          status: 'sent',
+          resend_id: emailResult.data?.id
+        }]);
+        console.log('✅ Payment confirmation email sent');
+      }
+    } catch (emailError) {
+      console.error('⚠️ Email error (non-blocking):', emailError);
+      // Don't fail the whole process if email fails
     }
     
   } catch (error) {
@@ -238,7 +252,6 @@ async function handleSubscriptionCreated(subscription) {
       plan_type: planDetails.name,
       monthly_call_limit: planDetails.callLimit,
       trial_ends_at: subscription.trial_end ? new Date(subscription.trial_end * 1000) : null
-      // Removed 'status' - has database constraint
     })
     .eq('id', client.id);
 
@@ -269,7 +282,6 @@ async function handleSubscriptionUpdated(subscription) {
     .from('clients')
     .update({
       subscription_status: subscription.status
-      // Removed 'status' - has database constraint
     })
     .eq('id', client.id);
 
@@ -300,7 +312,6 @@ async function handleSubscriptionDeleted(subscription) {
     .from('clients')
     .update({
       subscription_status: 'cancelled'
-      // Removed 'status' - has database constraint
     })
     .eq('id', client.id);
 
@@ -319,7 +330,7 @@ async function handleSubscriptionDeleted(subscription) {
 
   console.log('✅ Subscription cancelled for:', client.business_name);
 
-  // Send cancellation email (simple version - can use template later)
+  // Send cancellation email
   await sendEmail({
     to: client.email,
     subject: 'CallBird Subscription Cancelled',
@@ -346,7 +357,6 @@ async function handlePaymentSucceeded(invoice) {
     .update({
       subscription_status: 'active',
       calls_this_month: 0  // Reset for new billing period
-      // Removed 'status' - has database constraint
     })
     .eq('id', client.id);
 
@@ -393,7 +403,6 @@ async function handlePaymentFailed(invoice) {
     .from('clients')
     .update({
       subscription_status: 'past_due'
-      // Removed 'status' - has database constraint
     })
     .eq('id', client.id);
 
@@ -489,7 +498,7 @@ async function handleStripeWebhook(req, res) {
   // Handle the event
   try {
     switch (event.type) {
-      case 'checkout.session.completed':  // NEW - Critical for GHL checkout
+      case 'checkout.session.completed':
         await handleCheckoutCompleted(event.data.object);
         break;
 

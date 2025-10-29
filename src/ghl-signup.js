@@ -5,6 +5,11 @@ const { createKnowledgeBaseFromWebsite } = require('./website-scraper');
 const { provisionLocalPhone } = require('./phone-provisioning');
 const { Resend } = require('resend');
 
+// ============================================
+// 🆕 IMPORT INDUSTRY VAPI CONFIG
+// ============================================
+const { createIndustryAssistant } = require('./vapi-assistant-config');
+
 // Initialize services
 const supabase = createClient(
   process.env.SUPABASE_URL,
@@ -13,20 +18,10 @@ const supabase = createClient(
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
-// Industry template mapping
-const INDUSTRY_TEMPLATES = {
-  'plumbing': 'home_services',
-  'hvac': 'home_services',
-  'electrical': 'home_services',
-  'roofing': 'home_services',
-  'general_contractor': 'home_services',
-  'medical': 'medical',
-  'dental': 'medical',
-  'retail': 'retail',
-  'legal': 'professional_services',
-  'accounting': 'professional_services',
-  'restaurant': 'restaurants'
-};
+// ============================================
+// 🗑️ REMOVED OLD INDUSTRY_TEMPLATES
+// Now handled by vapi-assistant-config.js
+// ============================================
 
 // Format phone to E.164
 function formatPhoneE164(phone) {
@@ -67,95 +62,10 @@ async function createPasswordToken(userId, email) {
   return token;
 }
 
-// Create VAPI assistant with knowledge base
-async function createVAPIAssistant(businessName, industry, websiteUrl) {
-  try {
-    console.log(`🤖 Creating VAPI assistant for ${businessName}...`);
-    
-    let knowledgeBaseId = null;
-    if (websiteUrl && websiteUrl.trim().length > 0) {
-      console.log('🌐 Website URL provided, creating knowledge base...');
-      knowledgeBaseId = await createKnowledgeBaseFromWebsite(
-        websiteUrl,
-        businessName,
-        process.env.VAPI_API_KEY
-      );
-      
-      if (knowledgeBaseId) {
-        console.log(`✅ Knowledge base ready: ${knowledgeBaseId}`);
-      } else {
-        console.log('⚠️ Knowledge base creation failed, continuing without it');
-      }
-    }
-
-    const templateType = INDUSTRY_TEMPLATES[industry?.toLowerCase()] || 'home_services';
-    
-    const systemPrompt = knowledgeBaseId 
-      ? `You are a professional AI receptionist for ${businessName}. Answer calls politely and professionally. When customers ask about ${businessName}'s services, pricing, location, or company information, use the knowledge base to provide accurate details from their website. Extract the caller's name, phone number, and reason for calling. Be helpful, friendly, and efficient.`
-      : `You are a professional AI receptionist for ${businessName}. Answer calls politely and professionally. Extract the caller's name, phone number, and reason for calling. Be helpful, friendly, and efficient.`;
-
-    const assistantConfig = {
-      name: `${businessName} Receptionist`,
-      model: {
-        provider: 'openai',
-        model: 'gpt-4',
-        temperature: 0.7,
-        knowledgeBaseId: knowledgeBaseId,
-        messages: [{ 
-          role: 'system', 
-          content: systemPrompt
-        }]
-      },
-      voice: {
-        provider: 'azure',
-        voiceId: 'andrew'
-      },
-      firstMessage: `Thank you for calling ${businessName}. How can I help you today?`,
-      endCallMessage: 'Thank you for calling. Have a great day!',
-      endCallPhrases: ['goodbye', 'bye', 'hang up'],
-      recordingEnabled: true,
-      serverMessages: ['end-of-call-report', 'transcript'],
-      serverUrl: process.env.BACKEND_URL + '/webhook/vapi',
-      analysisPlan: {
-        structuredDataSchema: {
-          type: 'object',
-          properties: {
-            customer_name: { type: 'string' },
-            customer_phone: { type: 'string' },
-            urgency: { 
-              type: 'string',
-              enum: ['low', 'medium', 'high', 'emergency']
-            },
-            service_type: { type: 'string' },
-            issue_description: { type: 'string' }
-          }
-        }
-      }
-    };
-
-    const response = await fetch('https://api.vapi.ai/assistant', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${process.env.VAPI_API_KEY}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(assistantConfig)
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`VAPI assistant creation failed: ${errorText}`);
-    }
-
-    const assistant = await response.json();
-    console.log(`✅ Assistant created: ${assistant.id}`);
-    
-    return assistant;
-  } catch (error) {
-    console.error('❌ Error creating VAPI assistant:', error);
-    throw error;
-  }
-}
+// ============================================
+// 🗑️ REMOVED OLD createVAPIAssistant function
+// Now using createIndustryAssistant from vapi-assistant-config.js
+// ============================================
 
 // Configure phone number webhook
 async function configurePhoneWebhook(phoneId, assistantId) {
@@ -249,10 +159,44 @@ async function handleGHLSignup(req, res) {
     const formattedOwnerPhone = formatPhoneE164(phone);
     console.log(`📱 Formatted phone: ${formattedOwnerPhone}`);
 
-    // Step 1: Create VAPI assistant with knowledge base
-    const assistant = await createVAPIAssistant(businessName, industry, websiteUrl);
+    // ============================================
+    // 🆕 STEP 1: CREATE KNOWLEDGE BASE (IF WEBSITE PROVIDED)
+    // ============================================
+    let knowledgeBaseId = null;
+    if (websiteUrl && websiteUrl.trim().length > 0) {
+      console.log('🌐 Website URL provided, creating knowledge base...');
+      try {
+        knowledgeBaseId = await createKnowledgeBaseFromWebsite(
+          websiteUrl,
+          businessName,
+          process.env.VAPI_API_KEY
+        );
+        
+        if (knowledgeBaseId) {
+          console.log(`✅ Knowledge base ready: ${knowledgeBaseId}`);
+        } else {
+          console.log('⚠️ Knowledge base creation failed, continuing without it');
+        }
+      } catch (kbError) {
+        console.error('⚠️ Knowledge base error (non-blocking):', kbError.message);
+      }
+    }
 
-    // Step 2: Provision LOCAL phone number
+    // ============================================
+    // 🆕 STEP 2: CREATE INDUSTRY-SPECIFIC VAPI ASSISTANT
+    // Using the new industry config system
+    // ============================================
+    console.log(`🤖 Creating industry-specific VAPI assistant for: ${industry}`);
+    
+    const assistant = await createIndustryAssistant({
+      industry: industry,
+      businessName: businessName,
+      knowledgeBaseId: knowledgeBaseId
+    });
+    
+    console.log(`✅ Industry assistant created: ${assistant.id}`);
+
+    // Step 3: Provision LOCAL phone number
     const phoneData = await provisionLocalPhone(
       businessCity,
       businessState,
@@ -262,10 +206,10 @@ async function handleGHLSignup(req, res) {
     
     console.log(`✅ Phone provisioned: ${phoneData.number}`);
 
-    // Step 2.5: Configure phone webhook
+    // Step 3.5: Configure phone webhook
     await configurePhoneWebhook(phoneData.id, assistant.id);
 
-    // Step 3: Create client record
+    // Step 4: Create client record
     const trialEndsAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
     
     const { data: newClient, error: clientError } = await supabase
@@ -282,7 +226,7 @@ async function handleGHLSignup(req, res) {
         industry: industry || 'general',
         vapi_assistant_id: assistant.id,
         vapi_phone_number: phoneData.number,
-        knowledge_base_id: assistant.model.knowledgeBaseId || null,
+        knowledge_base_id: knowledgeBaseId,
         subscription_status: 'trial',
         trial_ends_at: trialEndsAt,
         status: 'active',
@@ -300,7 +244,7 @@ async function handleGHLSignup(req, res) {
 
     console.log(`🎉 Client created successfully: ${newClient.business_name}`);
 
-    // Step 4: Create user record
+    // Step 5: Create user record
     const { data: newUser, error: userError } = await supabase
       .from('users')
       .insert({
@@ -320,11 +264,11 @@ async function handleGHLSignup(req, res) {
 
     console.log(`✅ User created: ${newUser.id}`);
 
-    // Step 5: Generate password token
+    // Step 6: Generate password token
     const token = await createPasswordToken(newUser.id, email);
     console.log(`✅ Password token generated`);
 
-    // Step 6: Send password setup email
+    // Step 7: Send password setup email
     console.log('📧 Sending welcome email...');
     
     try {
@@ -352,7 +296,7 @@ async function handleGHLSignup(req, res) {
       console.error('⚠️ Email error:', emailError);
     }
 
-    // Step 7: Create Stripe customer
+    // Step 8: Create Stripe customer
     console.log('💳 Creating Stripe customer...');
 
     try {

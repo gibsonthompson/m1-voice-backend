@@ -1,6 +1,16 @@
 const express = require('express');
 const cors = require('cors');
 
+// ============================================
+// 🆕 ADD RATE LIMITING
+// ============================================
+const { 
+  apiLimiter, 
+  authLimiter, 
+  webhookLimiter, 
+  signupLimiter 
+} = require('./rate-limiter');
+
 // Import route handlers
 const routes = require('./routes');
 const vapiWebhook = require('./webhooks');
@@ -31,6 +41,13 @@ app.post('/api/webhooks/stripe',
 // ============================================
 // JSON parsing for all other routes
 app.use(express.json());
+
+// ============================================
+// 🆕 RATE LIMITING - PROTECT API
+// ============================================
+app.use('/api/', apiLimiter);           // General API: 100 req/15min
+app.use('/webhook/', webhookLimiter);   // Webhooks: 1000 req/hour
+app.use('/api/webhooks/ghl-signup', signupLimiter);  // Signups: 3/hour
 
 // ============================================
 // VAPI WEBHOOK - CRITICAL FOR CALL HANDLING
@@ -167,6 +184,10 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log(`   Resend: ${process.env.RESEND_API_KEY ? '✓ Configured' : '✗ Missing'}`);
   console.log(`   GHL: ${process.env.GHL_API_KEY ? '✓ Configured' : '✗ Missing'}`);
   console.log(`   Cron Secret: ${process.env.CRON_SECRET ? '✓ Configured' : '✗ Missing'}`);
+  console.log(`\n🔒 Rate Limiting: ENABLED`);
+  console.log(`   API Routes: 100 req/15min per IP`);
+  console.log(`   Webhooks: 1000 req/hour`);
+  console.log(`   Signups: 3 req/hour per IP`);
   console.log(`\n📍 Critical Routes:`);
   console.log(`   POST /webhook/vapi - VAPI call webhooks`);
   console.log(`   POST /api/webhooks/stripe - Stripe payment webhooks`);
