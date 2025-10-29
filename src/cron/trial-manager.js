@@ -207,54 +207,17 @@ async function checkExpiredTrials() {
 // Handle expired trial - suspend account and send email
 async function handleExpiredTrial(client, clientData) {
   try {
-    // 1. Disable VAPI assistant (add suspension message)
-    if (client.vapi_assistant_id) {
-      console.log('🔇 Disabling VAPI assistant...');
-      
-      try {
-        const vapiResponse = await fetch(
-          `https://api.vapi.ai/assistant/${client.vapi_assistant_id}`,
-          {
-            method: 'PATCH',
-            headers: {
-              'Authorization': `Bearer ${process.env.VAPI_API_KEY}`,
-              'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-              model: {
-                messages: [{
-                  role: 'system',
-                  content: `You are an automated message system. When someone calls, say: "Thank you for calling ${client.business_name}. This CallBird account is currently on hold. Please contact the business owner directly. If you're the owner, please visit your CallBird dashboard at app.callbirdai.com to reactivate your subscription. Goodbye." Then end the call immediately.`
-                }]
-              }
-            })
-          }
-        );
+    // 1. Skip VAPI update for now - calls will still work, just won't have suspension message
+    // The important part is marking the account as expired in the database
+    // TODO: Implement proper VAPI suspension later if needed
+    console.log('ℹ️ Skipping VAPI assistant update (account will be marked as expired in database)');
 
-        if (vapiResponse.ok) {
-          console.log('✅ VAPI assistant disabled');
-        } else {
-          const errorText = await vapiResponse.text();
-          console.error('❌ Failed to disable VAPI assistant:', {
-            status: vapiResponse.status,
-            statusText: vapiResponse.statusText,
-            error: errorText,
-            assistantId: client.vapi_assistant_id
-          });
-          // Continue anyway - don't block database updates
-        }
-      } catch (error) {
-        console.error('❌ VAPI assistant disable error:', error.message);
-        // Continue anyway - don't block database updates
-      }
-    }
-
-    // 2. Update client status
+    // 2. Update client subscription status (don't touch 'status' field - has constraint)
     const { error: updateError } = await supabase
       .from('clients')
       .update({
         subscription_status: 'trial_expired',
-        status: 'suspended',
+        // Removed 'status' update - has database constraint we don't want to violate
         updated_at: new Date().toISOString()
       })
       .eq('id', client.id);

@@ -157,7 +157,7 @@ async function handleCheckoutCompleted(session) {
         monthly_call_limit: planDetails.callLimit,
         calls_this_month: 0,
         trial_ends_at: null,  // Clear trial date
-        status: 'active',
+        // Removed 'status' update - has database constraint
         updated_at: new Date().toISOString()
       })
       .eq('id', client.id);
@@ -237,8 +237,8 @@ async function handleSubscriptionCreated(subscription) {
       subscription_status: subscription.status,
       plan_type: planDetails.name,
       monthly_call_limit: planDetails.callLimit,
-      trial_ends_at: subscription.trial_end ? new Date(subscription.trial_end * 1000) : null,
-      status: 'active'
+      trial_ends_at: subscription.trial_end ? new Date(subscription.trial_end * 1000) : null
+      // Removed 'status' - has database constraint
     })
     .eq('id', client.id);
 
@@ -268,8 +268,8 @@ async function handleSubscriptionUpdated(subscription) {
   const { error } = await supabase
     .from('clients')
     .update({
-      subscription_status: subscription.status,
-      status: subscription.status === 'active' ? 'active' : 'suspended'
+      subscription_status: subscription.status
+      // Removed 'status' - has database constraint
     })
     .eq('id', client.id);
 
@@ -299,8 +299,8 @@ async function handleSubscriptionDeleted(subscription) {
   const { error } = await supabase
     .from('clients')
     .update({
-      subscription_status: 'cancelled',
-      status: 'suspended'
+      subscription_status: 'cancelled'
+      // Removed 'status' - has database constraint
     })
     .eq('id', client.id);
 
@@ -345,8 +345,8 @@ async function handlePaymentSucceeded(invoice) {
     .from('clients')
     .update({
       subscription_status: 'active',
-      status: 'active',
       calls_this_month: 0  // Reset for new billing period
+      // Removed 'status' - has database constraint
     })
     .eq('id', client.id);
 
@@ -392,8 +392,8 @@ async function handlePaymentFailed(invoice) {
   const { error } = await supabase
     .from('clients')
     .update({
-      subscription_status: 'past_due',
-      status: 'suspended'
+      subscription_status: 'past_due'
+      // Removed 'status' - has database constraint
     })
     .eq('id', client.id);
 
