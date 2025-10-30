@@ -9,7 +9,6 @@ const supabase = createClient(
 // ============================================
 // EMAIL HELPER FUNCTIONS
 // ============================================
-
 async function sendUsageWarningEmail(client, currentCalls, limit) {
   try {
     const response = await fetch('https://api.resend.com/emails', {
@@ -27,24 +26,20 @@ async function sendUsageWarningEmail(client, currentCalls, limit) {
             <h2 style="color: #F59E0B;">You're approaching your call limit</h2>
             <p>Hi ${client.contact_name || client.business_name},</p>
             <p>You've used <strong>${currentCalls} of ${limit} calls</strong> (${Math.round((currentCalls/limit)*100)}%) this month.</p>
-            
             <div style="background: #FEF3C7; border-left: 4px solid #F59E0B; padding: 16px; margin: 20px 0;">
               <p style="margin: 0;"><strong>📊 Usage: ${currentCalls}/${limit} calls</strong></p>
             </div>
-
             <p><strong>Upgrade to avoid service interruption:</strong></p>
             <ul>
               <li><strong>Growth:</strong> $79/month - 500 calls</li>
               <li><strong>Pro:</strong> $199/month - 2000 calls</li>
             </ul>
-
             <div style="text-align: center; margin: 30px 0;">
               <a href="https://callbird-dashboard.vercel.app/billing" 
                  style="background: #111D96; color: white; padding: 12px 32px; text-decoration: none; border-radius: 6px; display: inline-block; font-weight: bold;">
                 Upgrade Plan
               </a>
             </div>
-
             <p style="color: #666; font-size: 14px;">Your plan resets at the start of next month.</p>
           </div>
         `
@@ -81,24 +76,20 @@ async function sendLimitReachedEmail(client, limit) {
             <h2 style="color: #dc2626;">You've reached your monthly call limit</h2>
             <p>Hi ${client.contact_name || client.business_name},</p>
             <p>You've used all <strong>${limit} calls</strong> included in your current plan.</p>
-            
             <div style="background: #FEF2F2; border-left: 4px solid #dc2626; padding: 16px; margin: 20px 0;">
               <p style="margin: 0; color: #991b1b;"><strong>⚠️ Additional calls are now being blocked</strong></p>
             </div>
-
             <p><strong>Upgrade now to resume service:</strong></p>
             <ul>
               <li><strong>Growth:</strong> $79/month - 500 calls</li>
               <li><strong>Pro:</strong> $199/month - 2000 calls</li>
             </ul>
-
             <div style="text-align: center; margin: 30px 0;">
               <a href="https://callbird-dashboard.vercel.app/billing" 
                  style="background: #dc2626; color: white; padding: 14px 36px; text-decoration: none; border-radius: 6px; display: inline-block; font-weight: bold; font-size: 16px;">
                 Upgrade Now
               </a>
             </div>
-
             <p style="color: #666; font-size: 14px;">Your call count resets at the start of next billing cycle.</p>
           </div>
         `
@@ -133,11 +124,9 @@ function formatPhoneE164(phone) {
   if (digits.length === 11 && digits.startsWith('1')) {
     return `+${digits}`;
   }
-  
   if (digits.length === 10) {
     return `+1${digits}`;
   }
-  
   if (digits.length === 11) {
     return `+${digits}`;
   }
@@ -195,7 +184,6 @@ async function findGHLContact(phone) {
     
     console.log('⚠️ Contact not found');
     return null;
-    
   } catch (error) {
     console.error('❌ Error searching contact:', error.response?.data || error.message);
     return null;
@@ -237,7 +225,6 @@ async function createGHLContact(phone, name = null) {
     const contactId = response.data.contact.id;
     console.log('✅ Contact created:', contactId);
     return contactId;
-    
   } catch (error) {
     console.error('❌ Error creating contact:', error.response?.data || error.message);
     return null;
@@ -261,7 +248,6 @@ async function sendGHLSMS(toPhone, message, businessOwnerName = null) {
     if (!formattedPhone) {
       throw new Error(`Invalid phone format: ${toPhone}`);
     }
-    
     console.log('   Formatted phone:', formattedPhone);
     
     // Step 1: Search for existing contact
@@ -271,7 +257,6 @@ async function sendGHLSMS(toPhone, message, businessOwnerName = null) {
     if (!contactId) {
       console.log('📝 Contact does not exist, creating...');
       contactId = await createGHLContact(formattedPhone, businessOwnerName);
-      
       if (!contactId) {
         throw new Error('Failed to create contact');
       }
@@ -295,12 +280,12 @@ async function sendGHLSMS(toPhone, message, businessOwnerName = null) {
         }
       }
     );
-
+    
     console.log('✅ SMS sent via GHL successfully!');
     console.log('   Conversation ID:', response.data.conversationId);
     console.log('   Message ID:', response.data.messageId || response.data.id);
-    return true;
     
+    return true;
   } catch (error) {
     console.error('❌ GHL SMS error:', error.response?.data || error.message);
     
@@ -328,7 +313,7 @@ function extractCustomerName(transcript) {
     /speaking with (\w+(?:\s+\w+)?)/i,
     /call me (\w+(?:\s+\w+)?)/i,
   ];
-  
+
   for (const pattern of patterns) {
     const match = transcript.match(pattern);
     if (match && match[1]) {
@@ -370,12 +355,10 @@ function detectUrgency(transcript) {
   
   const emergencyWords = ['emergency', 'urgent', 'asap', 'immediately', 'right now', 'critical', 'serious'];
   const hasEmergency = emergencyWords.some(word => lowerTranscript.includes(word));
-  
   if (hasEmergency) return 'HIGH';
   
   const mediumWords = ['soon', 'quickly', 'today', 'this week'];
   const hasMedium = mediumWords.some(word => lowerTranscript.includes(word));
-  
   if (hasMedium) return 'MEDIUM';
   
   return 'NORMAL';
@@ -384,7 +367,6 @@ function detectUrgency(transcript) {
 // ============================================
 // MAIN WEBHOOK HANDLER
 // ============================================
-
 async function handleVapiWebhook(req, res) {
   try {
     console.log('📞 VAPI webhook received');
@@ -397,36 +379,35 @@ async function handleVapiWebhook(req, res) {
       
       // Get the actual phone number
       const phoneNumber = await getPhoneNumberFromVapi(phoneNumberId);
-
       if (!phoneNumber) {
         console.log('⚠️ Could not get phone number from VAPI');
         return res.status(200).json({ received: true });
       }
-
+      
       console.log('📱 Phone number:', phoneNumber);
-
+      
       // Find client by VAPI phone number
       const { data: client, error: clientError } = await supabase
         .from('clients')
         .select('*')
         .eq('vapi_phone_number', phoneNumber)
         .single();
-
+      
       if (clientError || !client) {
         console.log('⚠️ No client found for phone:', phoneNumber);
         return res.status(200).json({ received: true });
       }
-
+      
       console.log('✅ Client found:', client.business_name);
-
+      
       // ============================================
       // 🆕 HARD BLOCK: CHECK CALL LIMITS BEFORE PROCESSING
       // ============================================
       const currentCallCount = client.calls_this_month || 0;
       const callLimit = client.monthly_call_limit || 100;
-
+      
       console.log(`📊 Current usage: ${currentCallCount}/${callLimit} calls`);
-
+      
       if (currentCallCount >= callLimit) {
         console.log(`🚫 CALL BLOCKED: ${client.business_name} has reached limit`);
         console.log(`   Usage: ${currentCallCount}/${callLimit}`);
@@ -448,31 +429,25 @@ async function handleVapiWebhook(req, res) {
           message: `Client ${client.business_name} has used all ${callLimit} calls for this billing period`
         });
       }
-
+      
       console.log(`✅ Within limit, processing call...`);
-
+      
       // ============================================
       // CONTINUE WITH NORMAL CALL PROCESSING
       // ============================================
-
       const transcript = message.transcript || '';
       const callerPhone = call.customer?.number || 'Unknown';
       
       // Use VAPI's analysis if available
       const analysis = message.analysis || {};
-      
       const customerName = analysis.structuredData?.customerName || 
                           extractCustomerName(transcript);
-      
       const customerPhone = analysis.structuredData?.customerPhone || 
                            extractPhoneNumber(transcript) || 
                            callerPhone;
-      
       const customerEmail = extractEmail(transcript);
-      
       const urgency = analysis.structuredData?.urgency || 
                      detectUrgency(transcript);
-      
       const serviceType = analysis.structuredData?.serviceType || null;
       
       // Build smart summary
@@ -482,25 +457,37 @@ async function handleVapiWebhook(req, res) {
       } else {
         aiSummary = 'Customer called';
       }
-      
       if (serviceType) {
         aiSummary += ` about ${serviceType}`;
       }
-      
       if (analysis.structuredData?.appointmentRequested) {
         aiSummary += ' - requested appointment';
       }
-      
       if (urgency === 'HIGH' || urgency === 'high') {
         aiSummary += ' (URGENT)';
       }
-      
       if (customerPhone && customerPhone !== 'Unknown') {
         aiSummary += `. Contact: ${customerPhone}`;
       }
-      
       aiSummary = aiSummary.trim() + '.';
+
+      // ============================================
+      // 🎵 EXTRACT RECORDING URL FROM VAPI
+      // ============================================
+      // VAPI can send recording URL in multiple places
+      const recordingUrl = 
+        message.recordingUrl ||           // Top level
+        message.artifact?.recordingUrl || // In artifact
+        call.recordingUrl ||              // In call object
+        message.recording?.url ||         // In recording object
+        null;
       
+      if (recordingUrl) {
+        console.log('🎵 Recording URL found:', recordingUrl);
+      } else {
+        console.log('⚠️ No recording URL in webhook payload');
+      }
+
       // Save to database
       const callRecord = {
         client_id: client.id,
@@ -508,14 +495,15 @@ async function handleVapiWebhook(req, res) {
         customer_phone: customerPhone,
         ai_summary: aiSummary,
         transcript: transcript,
+        recording_url: recordingUrl, // 🆕 Save recording URL
         created_at: new Date().toISOString()
       };
-
+      
       console.log('💾 Saving call to Supabase...');
       console.log('   Customer:', customerName);
       console.log('   Phone:', customerPhone);
       console.log('   Urgency:', urgency);
-
+      
       const { data: insertedCall, error: insertError } = await supabase
         .from('calls')
         .insert([callRecord])
@@ -527,12 +515,12 @@ async function handleVapiWebhook(req, res) {
       }
       
       console.log('✅ Call saved successfully');
-
+      
       // ============================================
       // TRACK CALL USAGE & CHECK LIMITS
       // ============================================
       console.log('📊 Tracking call usage...');
-
+      
       try {
         // Increment call counter
         const newCallCount = currentCallCount + 1;
@@ -541,12 +529,11 @@ async function handleVapiWebhook(req, res) {
           .from('clients')
           .update({ calls_this_month: newCallCount })
           .eq('id', client.id);
-
+        
         console.log(`✅ Call count updated: ${newCallCount}/${callLimit}`);
-
+        
         // Check if approaching limit (80%)
         const usagePercent = (newCallCount / callLimit) * 100;
-
         if (usagePercent >= 80 && usagePercent < 100) {
           console.log(`⚠️ Client ${client.email} at ${usagePercent.toFixed(0)}% of call limit`);
           
@@ -555,7 +542,7 @@ async function handleVapiWebhook(req, res) {
             await sendUsageWarningEmail(client, newCallCount, callLimit);
           }
         }
-
+        
         // Check if limit just reached (100%)
         if (newCallCount >= callLimit) {
           console.log(`🚨 Client ${client.email} reached call limit!`);
@@ -568,7 +555,7 @@ async function handleVapiWebhook(req, res) {
       } catch (usageError) {
         console.error('⚠️ Usage tracking error (non-blocking):', usageError.message);
       }
-
+      
       // ============================================
       // SEND SMS NOTIFICATION
       // ============================================
@@ -580,7 +567,6 @@ async function handleVapiWebhook(req, res) {
         
         // Format phone number to E.164
         const formattedPhone = formatPhoneE164(client.owner_phone);
-        
         console.log('   Formatted to E.164:', formattedPhone);
         
         if (!formattedPhone) {
@@ -590,15 +576,12 @@ async function handleVapiWebhook(req, res) {
           let smsMessage = `🔔 New Call - ${client.business_name}\n\n`;
           smsMessage += `Customer: ${customerName}\n`;
           smsMessage += `Phone: ${customerPhone}\n`;
-          
           if (customerEmail) {
             smsMessage += `Email: ${customerEmail}\n`;
           }
-          
           if (urgency === 'HIGH') {
             smsMessage += `⚠️ Urgency: HIGH\n`;
           }
-          
           smsMessage += `\nSummary: ${aiSummary}\n\n`;
           smsMessage += `View full details in your CallBird dashboard.`;
           
@@ -617,13 +600,14 @@ async function handleVapiWebhook(req, res) {
       } else {
         console.log('⚠️ No owner_phone configured for this client');
       }
-
+      
       return res.status(200).json({ 
         received: true,
         saved: true,
         callId: insertedCall[0]?.id,
         smsSent: smsSent,
         usageTracked: true,
+        recordingUrl: recordingUrl, // 🆕 Return recording URL in response
         extractedData: {
           customerName,
           customerPhone,
@@ -633,9 +617,8 @@ async function handleVapiWebhook(req, res) {
         }
       });
     }
-
+    
     return res.status(200).json({ received: true });
-
   } catch (error) {
     console.error('❌ Webhook error:', error);
     return res.status(500).json({ error: error.message });

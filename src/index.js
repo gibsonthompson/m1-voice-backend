@@ -20,6 +20,14 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 // ============================================
+// 🔧 TRUST PROXY - FIX RATE LIMITING ERROR
+// ============================================
+// Trust first proxy (Render, Vercel, etc.)
+// Required for rate-limiting to work correctly behind a proxy
+// Fixes: ValidationError: The 'X-Forwarded-For' header is set...
+app.set('trust proxy', 1);
+
+// ============================================
 // CORS - Allow frontend access
 // ============================================
 app.use(cors({
