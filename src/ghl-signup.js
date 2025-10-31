@@ -160,7 +160,7 @@ async function handleGHLSignup(req, res) {
     console.log(`📱 Formatted phone: ${formattedOwnerPhone}`);
 
     // ============================================
-    // 🆕 STEP 1: CREATE KNOWLEDGE BASE (IF WEBSITE PROVIDED)
+    // STEP 1: CREATE KNOWLEDGE BASE (IF WEBSITE PROVIDED)
     // ============================================
     let knowledgeBaseId = null;
     if (websiteUrl && websiteUrl.trim().length > 0) {
@@ -183,16 +183,18 @@ async function handleGHLSignup(req, res) {
     }
 
     // ============================================
-    // 🆕 STEP 2: CREATE INDUSTRY-SPECIFIC VAPI ASSISTANT
-    // Using the new industry config system
+    // STEP 2: CREATE INDUSTRY-SPECIFIC VAPI ASSISTANT
+    // ✅ UPDATED: Now includes call transfer support via owner phone
     // ============================================
     console.log(`🤖 Creating industry-specific VAPI assistant for: ${industry}`);
     
-    const assistant = await createIndustryAssistant({
-      industry: industry,
-      businessName: businessName,
-      knowledgeBaseId: knowledgeBaseId
-    });
+    const assistant = await createIndustryAssistant(
+      businessName,
+      industry,
+      knowledgeBaseId,
+      formattedOwnerPhone,  // ✅ ADDED: Enables call transfer to owner
+      process.env.BACKEND_URL + '/webhook/vapi'
+    );
     
     console.log(`✅ Industry assistant created: ${assistant.id}`);
 
