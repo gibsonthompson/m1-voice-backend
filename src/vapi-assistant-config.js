@@ -1506,7 +1506,7 @@ async function disableVAPIAssistant(assistantId) {
       return false;
     }
 
-    console.log(`✅ Assistant disabled: ${assistant Id}`);
+    console.log(`✅ Assistant disabled: ${assistantId}`);
     return true;
   } catch (error) {
     console.error('❌ Error disabling assistant:', error);
