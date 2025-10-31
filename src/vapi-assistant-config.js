@@ -1386,13 +1386,12 @@ function getIndustryConfig(industryFromGHL, businessName, knowledgeBaseId = null
   return {
     name: `${businessName} AI Receptionist`,
     
-    // Knowledge base at top level
-    ...(knowledgeBaseId && { knowledgeBaseId: knowledgeBaseId }),
-    
     model: {
       provider: 'openai',
       model: 'gpt-4',
       temperature: config.temperature,
+      // Knowledge base ID goes here in model
+      ...(knowledgeBaseId && { knowledgeBaseId: knowledgeBaseId }),
       messages: [{ 
         role: 'system', 
         content: config.systemPrompt(businessName)
@@ -1404,7 +1403,7 @@ function getIndustryConfig(industryFromGHL, businessName, knowledgeBaseId = null
     },
     
     voice: {
-      provider: 'elevenlabs',
+      provider: '11labs',
       voiceId: config.voiceId
     },
     
