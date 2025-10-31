@@ -31,7 +31,7 @@ const INDUSTRY_CONFIGS = {
   // 1. HOME SERVICES
   // ================================================================
   home_services: {
-    voice: 'andrew',
+    voice: 'en-US-AndrewNeural', // Azure: Friendly professional male voice
     temperature: 0.7,
     
     systemPrompt: (businessName) => `You are the AI phone assistant for ${businessName}, a home services company. You handle calls naturally and professionally, just like a skilled human receptionist would.
@@ -220,7 +220,7 @@ IMPORTANT:
   // 2. MEDICAL/DENTAL
   // ================================================================
   medical: {
-    voice: 'sarah',
+    voice: 'en-US-SaraNeural', // Azure: Calm professional female voice
     temperature: 0.6,
     
     systemPrompt: (businessName) => `You are the receptionist for ${businessName}, a medical or dental practice. You're the calming, professional voice that patients hear when they call.
@@ -455,7 +455,7 @@ REMEMBER:
   // 3. RETAIL/E-COMMERCE
   // ================================================================
   retail: {
-    voice: 'rachel',
+    voice: 'en-US-JennyNeural', // Azure: Upbeat friendly female voice
     temperature: 0.8,
     
     systemPrompt: (businessName) => `You are the phone assistant for ${businessName}, a retail store. You're the enthusiastic, helpful voice that makes customers excited to shop.
@@ -683,7 +683,7 @@ IMPORTANT:
   // 4. PROFESSIONAL SERVICES (Legal, Accounting, Consulting)
   // ================================================================
   professional_services: {
-    voice: 'matthew',
+    voice: 'en-US-GuyNeural', // Azure: Professional trustworthy male voice
     temperature: 0.6,
     
     systemPrompt: (businessName) => `You are the receptionist for ${businessName}, a professional services firm. You're the polished, professional first impression that clients experience.
@@ -975,7 +975,7 @@ CRITICAL REMINDERS:
   // 5. RESTAURANTS/FOOD SERVICE
   // ================================================================
   restaurants: {
-    voice: 'rachel',
+    voice: 'en-US-JennyNeural', // Azure: Warm friendly female voice
     temperature: 0.8,
     
     systemPrompt: (businessName) => `You are the phone assistant for ${businessName}, a restaurant. You're the warm, welcoming voice that makes people hungry and excited to dine with you.
