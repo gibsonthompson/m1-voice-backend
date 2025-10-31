@@ -1,13 +1,14 @@
 // ====================================================================
-// VAPI ASSISTANT CONFIGURATION - Industry-Specific Templates (V2.0)
+// VAPI ASSISTANT CONFIGURATION - Industry-Specific Templates (V3.0)
 // ====================================================================
-// MAJOR UPDATES:
-// - Fixed VAPI API structure (summaryPlan, structuredDataPlan)
-// - Added call transfer support for all industries
-// - Completely rewritten system prompts (conversational, edge cases)
-// - Structured actionable summaries (business intelligence focused)
+// FULLY CORRECTED BASED ON VAPI API DOCUMENTATION:
+// - transferCall as TOOL in model.tools array (not transferPlan)
+// - ElevenLabs voice provider (not Azure)
+// - analysisPlan with enabled: true
+// - knowledgeBaseId at top level (not nested in model)
+// - All 5 industries with professional conversational prompts
 // - Recording disclosure in all greetings
-// - Better data extraction and quality control
+// - Structured actionable summaries
 // ====================================================================
 
 const fetch = require('node-fetch');
@@ -21,6 +22,15 @@ const INDUSTRY_MAPPING = {
   'Restaurants/Food Service': 'restaurants'
 };
 
+// ElevenLabs Voice IDs - High Quality Voices
+// You can replace these with your own cloned voices or other ElevenLabs voices
+const VOICES = {
+  male_professional: '29vD33N1CtxCmqQRPOHJ',  // Drew - Deep, authoritative
+  female_warm: '21m00Tcm4TlvDq8ikWAM',        // Rachel - Warm, friendly
+  male_friendly: '2EiwWnXFnvU5JabPnv8n',      // Clyde - Conversational
+  female_soft: 'EXAVITQu4vr4xnSDxMaL'         // Bella - Soft, expressive
+};
+
 // ====================================================================
 // INDUSTRY CONFIGURATIONS
 // ====================================================================
@@ -31,7 +41,7 @@ const INDUSTRY_CONFIGS = {
   // 1. HOME SERVICES
   // ================================================================
   home_services: {
-    voice: 'en-US-AndrewNeural', // Azure: Friendly professional male voice
+    voiceId: VOICES.male_friendly,  // Clyde - friendly male
     temperature: 0.7,
     
     systemPrompt: (businessName) => `You are the AI phone assistant for ${businessName}, a home services company. You handle calls naturally and professionally, just like a skilled human receptionist would.
@@ -82,7 +92,7 @@ Transfer immediately if:
 - They're asking about specific pricing for a large commercial job
 - The issue is too technical for you to understand
 
-To transfer, say: "I'm going to connect you with [owner/manager name] right now who can help you better with this. One moment please."
+To transfer, say: "I'm going to connect you with [owner/manager] right now who can help you better with this. One moment please." Then use the transferCall function.
 
 PRICING QUESTIONS:
 Never give specific prices. Say: "Great question! Our technician will be able to give you an exact quote once they see what's going on. That way you get accurate pricing based on your specific situation."
@@ -220,7 +230,7 @@ IMPORTANT:
   // 2. MEDICAL/DENTAL
   // ================================================================
   medical: {
-    voice: 'en-US-SaraNeural', // Azure: Calm professional female voice
+    voiceId: VOICES.female_soft,  // Bella - calm, empathetic
     temperature: 0.6,
     
     systemPrompt: (businessName) => `You are the receptionist for ${businessName}, a medical or dental practice. You're the calming, professional voice that patients hear when they call.
@@ -288,7 +298,7 @@ Transfer immediately if:
 - Complex scheduling (multiple family members, special accommodations)
 - Complaint about care or staff
 
-Say: "I'm going to connect you with [person/department] who can help you better with this. Please hold for just a moment."
+Say: "I'm going to connect you with [person/department] who can help you better with this. Please hold for just a moment." Then use the transferCall function.
 
 COMMON QUESTIONS:
 
@@ -455,7 +465,7 @@ REMEMBER:
   // 3. RETAIL/E-COMMERCE
   // ================================================================
   retail: {
-    voice: 'en-US-JennyNeural', // Azure: Upbeat friendly female voice
+    voiceId: VOICES.female_warm,  // Rachel - upbeat, friendly
     temperature: 0.8,
     
     systemPrompt: (businessName) => `You are the phone assistant for ${businessName}, a retail store. You're the enthusiastic, helpful voice that makes customers excited to shop.
@@ -531,7 +541,7 @@ Transfer if:
 - Business/wholesale accounts
 - Something you truly can't answer
 
-Say: "Let me connect you with someone who can help you better with that specific question. One moment!"
+Say: "Let me connect you with someone who can help you better with that specific question. One moment!" Then use the transferCall function.
 
 EDGE CASES:
 
@@ -683,7 +693,7 @@ IMPORTANT:
   // 4. PROFESSIONAL SERVICES (Legal, Accounting, Consulting)
   // ================================================================
   professional_services: {
-    voice: 'en-US-GuyNeural', // Azure: Professional trustworthy male voice
+    voiceId: VOICES.male_professional,  // Drew - authoritative, trustworthy
     temperature: 0.6,
     
     systemPrompt: (businessName) => `You are the receptionist for ${businessName}, a professional services firm. You're the polished, professional first impression that clients experience.
@@ -773,7 +783,7 @@ Transfer immediately if:
 - Billing dispute or payment issues
 - They explicitly demand to speak to a partner/professional
 
-Say: "Let me connect you with [name/title] right away. Please hold for just a moment."
+Say: "Let me connect you with [name/title] right away. Please hold for just a moment." Then use the transferCall function.
 
 COMMON QUESTIONS:
 
@@ -975,7 +985,7 @@ CRITICAL REMINDERS:
   // 5. RESTAURANTS/FOOD SERVICE
   // ================================================================
   restaurants: {
-    voice: 'en-US-JennyNeural', // Azure: Warm friendly female voice
+    voiceId: VOICES.female_warm,  // Rachel - warm, enthusiastic
     temperature: 0.8,
     
     systemPrompt: (businessName) => `You are the phone assistant for ${businessName}, a restaurant. You're the warm, welcoming voice that makes people hungry and excited to dine with you.
@@ -1122,7 +1132,7 @@ Transfer if:
 - Special event planning
 - Media/press inquiries
 
-Say: "Let me connect you with our [manager/chef/catering team] who can help you better with this. One moment!"
+Say: "Let me connect you with our [manager/chef/catering team] who can help you better with this. One moment!" Then use the transferCall function.
 
 EDGE CASES:
 
@@ -1349,68 +1359,83 @@ function getIndustryConfig(industryFromGHL, businessName, knowledgeBaseId = null
     return getIndustryConfig('Professional Services (legal, accounting)', businessName, knowledgeBaseId, ownerPhone);
   }
 
-  // Build transfer list if owner phone provided
-  const transferList = ownerPhone ? [{
-    number: ownerPhone,
-    description: `Transfer to business owner for urgent matters, complex issues, or manager requests`
-  }] : [];
+  // Build transfer call tool if owner phone provided
+  const transferTool = ownerPhone ? {
+    type: 'transferCall',
+    destinations: [
+      {
+        type: 'number',
+        number: ownerPhone,
+        description: 'Transfer to business owner for urgent matters, complex issues, or manager requests',
+        message: 'One moment please, let me connect you with the owner.'
+      }
+    ],
+    messages: [
+      {
+        type: 'request-start',
+        content: 'Let me transfer you now.'
+      },
+      {
+        type: 'request-complete',
+        content: 'Transferring your call.'
+      }
+    ]
+  } : null;
 
   // Build complete VAPI assistant configuration
-  // FIXED: Proper VAPI API structure for summaryPlan and structuredDataPlan
   return {
     name: `${businessName} AI Receptionist`,
+    
+    // Knowledge base at top level
+    ...(knowledgeBaseId && { knowledgeBaseId: knowledgeBaseId }),
+    
     model: {
       provider: 'openai',
       model: 'gpt-4',
       temperature: config.temperature,
-      knowledgeBase: knowledgeBaseId ? {
-        provider: 'canonical',
-        knowledgeBaseId: knowledgeBaseId
-      } : undefined,
       messages: [{ 
         role: 'system', 
         content: config.systemPrompt(businessName)
-      }]
+      }],
+      // Add transfer tool if available
+      ...(transferTool && {
+        tools: [transferTool]
+      })
     },
+    
     voice: {
-      provider: 'azure',
-      voiceId: config.voice
+      provider: 'elevenlabs',
+      voiceId: config.voiceId
     },
+    
     firstMessage: config.firstMessage(businessName),
     endCallMessage: `Thank you for calling ${businessName}. Have a great day!`,
     endCallPhrases: ['goodbye', 'bye', 'thank you bye', 'that\'s all', 'have a good day'],
     recordingEnabled: true,
     
-    // CALL TRANSFER CONFIGURATION
-    ...(transferList.length > 0 && {
-      transferPlan: {
-        mode: 'assistant-says-destination-number-and-transfers-call',
-        destinations: transferList,
-        message: `One moment please, I'm transferring you now.`
-      }
-    }),
-    
     // SERVER MESSAGES
     serverMessages: ['end-of-call-report', 'transcript', 'status-update'],
     
-    // ANALYSIS PLAN - FIXED STRUCTURE
+    // ANALYSIS PLAN - CORRECT STRUCTURE WITH enabled: true
     analysisPlan: {
-      // Summary configuration - CORRECTED
+      // Summary configuration
       summaryPlan: {
-        enabled: true,
+        enabled: true,  // ✅ CRITICAL: Must be true
+        timeoutSeconds: 30,
         messages: [{
           role: 'system',
           content: config.summaryPrompt
         }]
       },
       
-      // Structured data extraction - CORRECTED
+      // Structured data extraction
       structuredDataPlan: {
-        enabled: true,
+        enabled: true,  // ✅ CRITICAL: Must be true
+        timeoutSeconds: 30,
         schema: config.structuredDataSchema,
         messages: [{
           role: 'system',
-          content: 'Extract the structured data from this call accurately and completely.'
+          content: 'Extract the structured data from this call accurately and completely. Ensure all required fields are captured.'
         }]
       }
     }
@@ -1431,10 +1456,10 @@ async function createIndustryAssistant(businessName, industry, knowledgeBaseId =
     config.serverUrl = serverUrl || process.env.BACKEND_URL + '/webhook/vapi';
     
     console.log(`📝 Industry: ${INDUSTRY_MAPPING[industry] || 'default'}`);
-    console.log(`🎤 Voice: ${config.voice.voiceId}`);
+    console.log(`🎤 Voice: ElevenLabs - ${config.voice.voiceId}`);
     console.log(`🌡️ Temperature: ${config.model.temperature}`);
-    console.log(`📞 Transfer enabled: ${!!ownerPhone}`);
-    if (ownerPhone) console.log(`📱 Owner phone: ${ownerPhone}`);
+    if (knowledgeBaseId) console.log(`📚 Knowledge Base: ${knowledgeBaseId}`);
+    if (ownerPhone) console.log(`📞 Transfer enabled to: ${ownerPhone}`);
     
     const response = await fetch('https://api.vapi.ai/assistant', {
       method: 'POST',
@@ -1481,7 +1506,7 @@ async function disableVAPIAssistant(assistantId) {
       return false;
     }
 
-    console.log(`✅ Assistant disabled: ${assistantId}`);
+    console.log(`✅ Assistant disabled: ${assistant Id}`);
     return true;
   } catch (error) {
     console.error('❌ Error disabling assistant:', error);
