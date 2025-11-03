@@ -136,64 +136,25 @@ async function updateKnowledgeBase(req, res) {
     console.log('✅ File uploaded to VAPI, ID:', fileId);
 
     // ========================================
-    // CREATE NEW KNOWLEDGE BASE (try different structures)
+    // CREATE NEW KNOWLEDGE BASE
     // ========================================
-    console.log('📚 Attempting to create knowledge base...');
-    
-    // Try structure 1: Just fileIds
-    console.log('🔄 Trying structure 1: { fileIds: [...] }');
-    let kbResponse = await fetch('https://api.vapi.ai/knowledge-base', {
+    console.log('📚 Creating knowledge base with structure 2...');
+    const kbResponse = await fetch('https://api.vapi.ai/knowledge-base', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${VAPI_API_KEY}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
+        provider: 'canonical',
         fileIds: [fileId],
       }),
     });
 
     if (!kbResponse.ok) {
-      const error1 = await kbResponse.text();
-      console.log('❌ Structure 1 failed:', error1);
-      
-      // Try structure 2: With provider
-      console.log('🔄 Trying structure 2: { provider: "canonical", fileIds: [...] }');
-      kbResponse = await fetch('https://api.vapi.ai/knowledge-base', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${VAPI_API_KEY}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          provider: 'canonical',
-          fileIds: [fileId],
-        }),
-      });
-
-      if (!kbResponse.ok) {
-        const error2 = await kbResponse.text();
-        console.log('❌ Structure 2 failed:', error2);
-        
-        // Try structure 3: Array of file IDs
-        console.log('🔄 Trying structure 3: { fileIds: ["..."] } (string array)');
-        kbResponse = await fetch('https://api.vapi.ai/knowledge-base', {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${VAPI_API_KEY}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            fileIds: [fileId.toString()],
-          }),
-        });
-
-        if (!kbResponse.ok) {
-          const error3 = await kbResponse.text();
-          console.error('❌ All structures failed. Errors:', { error1, error2, error3 });
-          throw new Error('Failed to create knowledge base - all API structures rejected');
-        }
-      }
+      const errorText = await kbResponse.text();
+      console.error('❌ Knowledge base creation failed:', errorText);
+      throw new Error('Failed to create knowledge base');
     }
 
     const kbData = await kbResponse.json();
@@ -205,34 +166,77 @@ async function updateKnowledgeBase(req, res) {
     // ========================================
     if (client.vapi_assistant_id) {
       console.log('🤖 Updating assistant to use new knowledge base...');
-      const assistantResponse = await fetch(`https://api.vapi.ai/assistant/${client.vapi_assistant_id}`, {
+      
+      // Approach 1: Try knowledgeBaseId at top level
+      console.log('🔄 Approach 1: Top-level knowledgeBaseId');
+      let assistantResponse = await fetch(`https://api.vapi.ai/assistant/${client.vapi_assistant_id}`, {
         method: 'PATCH',
         headers: {
           'Authorization': `Bearer ${VAPI_API_KEY}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          model: { 
-            knowledgeBaseId: knowledgeBaseId 
-          },
+          knowledgeBaseId: knowledgeBaseId,
         }),
       });
 
       if (!assistantResponse.ok) {
-        const errorText = await assistantResponse.text();
-        console.error('⚠️ Assistant update warning:', errorText);
+        const error1 = await assistantResponse.text();
+        console.log('❌ Approach 1 failed:', error1);
+        
+        // Approach 2: Get current assistant config and merge
+        console.log('🔄 Approach 2: Get current config and merge');
+        const getResponse = await fetch(`https://api.vapi.ai/assistant/${client.vapi_assistant_id}`, {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${VAPI_API_KEY}`,
+          },
+        });
+        
+        if (getResponse.ok) {
+          const currentAssistant = await getResponse.json();
+          console.log('✅ Got current assistant config');
+          
+          assistantResponse = await fetch(`https://api.vapi.ai/assistant/${client.vapi_assistant_id}`, {
+            method: 'PATCH',
+            headers: {
+              'Authorization': `Bearer ${VAPI_API_KEY}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              model: {
+                ...currentAssistant.model,
+                knowledgeBaseId: knowledgeBaseId,
+              },
+            }),
+          });
+          
+          if (!assistantResponse.ok) {
+            const error2 = await assistantResponse.text();
+            console.log('❌ Approach 2 failed:', error2);
+          }
+        } else {
+          console.log('❌ Could not fetch current assistant config');
+        }
+      }
+
+      if (!assistantResponse.ok) {
+        const finalError = await assistantResponse.text();
+        console.error('⚠️ All approaches failed (non-critical):', finalError);
+        console.log('ℹ️ Knowledge base created, but assistant link update failed');
+        console.log('ℹ️ Assistant may need manual update to use new knowledge base');
       } else {
-        console.log('✅ Assistant updated with new knowledge base');
+        console.log('✅ Assistant successfully updated with new knowledge base');
       }
     } else {
-      console.log('ℹ️ No assistant ID found, skipping assistant update');
+      console.log('⚠️ No assistant ID found, skipping assistant update');
     }
 
     // ========================================
     // SAVE TO DATABASE
     // ========================================
     console.log('💾 Saving to database...');
-    await supabase
+    const { error: updateError } = await supabase
       .from('clients')
       .update({
         knowledge_base_id: knowledgeBaseId,
@@ -244,6 +248,11 @@ async function updateKnowledgeBase(req, res) {
         website_url: websiteUrl || client.website_url,
       })
       .eq('id', clientId);
+
+    if (updateError) {
+      console.error('❌ Database update error:', updateError);
+      throw new Error('Failed to save to database');
+    }
 
     console.log('✅ Knowledge base update completed successfully');
 
