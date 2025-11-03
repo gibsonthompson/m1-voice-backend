@@ -15,6 +15,7 @@ const {
 const routes = require('./routes');
 const vapiWebhook = require('./webhooks');
 const { runTrialManager } = require('./cron/trial-manager');
+const { updateKnowledgeBase } = require('./knowledge-base'); // 🆕 ADD THIS
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -22,9 +23,6 @@ const PORT = process.env.PORT || 3000;
 // ============================================
 // 🔧 TRUST PROXY - FIX RATE LIMITING ERROR
 // ============================================
-// Trust first proxy (Render, Vercel, etc.)
-// Required for rate-limiting to work correctly behind a proxy
-// Fixes: ValidationError: The 'X-Forwarded-For' header is set...
 app.set('trust proxy', 1);
 
 // ============================================
@@ -38,7 +36,6 @@ app.use(cors({
 // ============================================
 // CRITICAL WEBHOOKS - RAW BODY REQUIRED
 // ============================================
-// Stripe webhook - MUST come before express.json()
 app.post('/api/webhooks/stripe', 
   express.raw({ type: 'application/json' }), 
   require('./routes/stripe-webhook').handleStripeWebhook
@@ -47,15 +44,14 @@ app.post('/api/webhooks/stripe',
 // ============================================
 // STANDARD MIDDLEWARE
 // ============================================
-// JSON parsing for all other routes
 app.use(express.json());
 
 // ============================================
 // 🆕 RATE LIMITING - PROTECT API
 // ============================================
-app.use('/api/', apiLimiter);           // General API: 100 req/15min
-app.use('/webhook/', webhookLimiter);   // Webhooks: 1000 req/hour
-app.use('/api/webhooks/ghl-signup', signupLimiter);  // Signups: 3/hour
+app.use('/api/', apiLimiter);
+app.use('/webhook/', webhookLimiter);
+app.use('/api/webhooks/ghl-signup', signupLimiter);
 
 // ============================================
 // VAPI WEBHOOK - CRITICAL FOR CALL HANDLING
@@ -63,12 +59,15 @@ app.use('/api/webhooks/ghl-signup', signupLimiter);  // Signups: 3/hour
 app.post('/webhook/vapi', vapiWebhook.handleVapiWebhook);
 
 // ============================================
+// 🆕 KNOWLEDGE BASE UPDATE ENDPOINT
+// ============================================
+app.post('/api/knowledge-base/update', updateKnowledgeBase);
+
+// ============================================
 // CRON JOB ENDPOINTS - TRIAL MANAGEMENT
 // ============================================
-// Automated cron endpoint (called by external cron service)
 app.post('/api/cron/check-trials', async (req, res) => {
   try {
-    // Simple auth check using secret key
     const authHeader = req.headers.authorization;
     const cronSecret = process.env.CRON_SECRET || 'your-secret-key-here';
     
@@ -78,8 +77,6 @@ app.post('/api/cron/check-trials', async (req, res) => {
     }
 
     console.log('⏰ Cron job triggered: Checking trial expirations');
-    
-    // Run the trial expiration check
     await runTrialManager();
     
     res.json({ 
@@ -97,11 +94,9 @@ app.post('/api/cron/check-trials', async (req, res) => {
   }
 });
 
-// Manual trigger endpoint (for testing/admin use)
 app.post('/api/admin/trigger-trial-check', async (req, res) => {
   try {
     console.log('🔧 Manual trigger: Checking trial expirations');
-    
     await runTrialManager();
     
     res.json({ 
@@ -135,6 +130,7 @@ app.get('/', (req, res) => {
     routes: {
       vapi: '/webhook/vapi',
       stripe: '/api/webhooks/stripe',
+      knowledgeBase: '/api/knowledge-base/update', // 🆕 ADD THIS
       cron: '/api/cron/check-trials',
       admin: '/api/admin/trigger-trial-check',
       api: '/api/*'
@@ -168,7 +164,6 @@ app.use((err, req, res, next) => {
   });
 });
 
-// 404 handler
 app.use((req, res) => {
   console.log(`⚠️ 404 - Route not found: ${req.method} ${req.path}`);
   res.status(404).json({ 
@@ -200,6 +195,7 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log(`   POST /webhook/vapi - VAPI call webhooks`);
   console.log(`   POST /api/webhooks/stripe - Stripe payment webhooks`);
   console.log(`   POST /api/webhooks/ghl-signup - GoHighLevel signups`);
+  console.log(`   POST /api/knowledge-base/update - Knowledge base updates`); // 🆕 ADD THIS
   console.log(`   POST /api/cron/check-trials - Automated trial checks`);
   console.log(`   POST /api/admin/trigger-trial-check - Manual trial check`);
 });
