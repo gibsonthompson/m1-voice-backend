@@ -47,13 +47,11 @@ async function updateKnowledgeBase(req, res) {
     console.log('✅ Client found:', client.business_name);
 
     // ========================================
-    // 🔑 MERGE LOGIC: Keep existing data if field is empty
+    // MERGE LOGIC: Keep existing data if field is empty
     // ========================================
-    // This ensures we don't erase data when user only updates one field
     const existingData = client.knowledge_base_data || {};
     
     const finalData = {
-      // If new value is provided, use it. Otherwise, keep existing.
       businessHours: businessHours || existingData.businessHours || '',
       services: services || existingData.services || '',
       faqs: faqs || existingData.faqs || '',
@@ -68,11 +66,10 @@ async function updateKnowledgeBase(req, res) {
     });
 
     // ========================================
-    // WEBSITE SCRAPING (if URL changed)
+    // WEBSITE SCRAPING (if URL provided)
     // ========================================
-    let websiteContent = existingData.websiteContent || ''; // Start with cached content
+    let websiteContent = existingData.websiteContent || '';
     
-    // Only re-scrape if URL is different from stored URL
     if (websiteUrl && websiteUrl.trim() && websiteUrl !== client.website_url) {
       try {
         console.log('🌐 Website URL changed, re-scraping:', websiteUrl);
@@ -83,10 +80,11 @@ async function updateKnowledgeBase(req, res) {
         }
       } catch (error) {
         console.error('⚠️ Website scraping failed:', error.message);
-        // Keep existing website content if scraping fails
       }
+    } else if (!websiteUrl || !websiteUrl.trim()) {
+      console.log('ℹ️ No website URL provided, using cached content');
     } else {
-      console.log('ℹ️ Using cached website content');
+      console.log('ℹ️ Website URL unchanged, using cached content');
     }
 
     // ========================================
@@ -138,32 +136,69 @@ async function updateKnowledgeBase(req, res) {
     console.log('✅ File uploaded to VAPI, ID:', fileId);
 
     // ========================================
-    // CREATE NEW KNOWLEDGE BASE (always create new)
+    // CREATE NEW KNOWLEDGE BASE (try different structures)
     // ========================================
-    // Note: We create new KB each time because VAPI's PATCH endpoint is unreliable
-    // The assistant gets updated to point to the new KB, so old ones become unused
-    console.log('📚 Creating new knowledge base...');
-    const kbResponse = await fetch('https://api.vapi.ai/knowledge-base', {
+    console.log('📚 Attempting to create knowledge base...');
+    
+    // Try structure 1: Just fileIds
+    console.log('🔄 Trying structure 1: { fileIds: [...] }');
+    let kbResponse = await fetch('https://api.vapi.ai/knowledge-base', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${VAPI_API_KEY}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        name: `${client.business_name} Knowledge Base`,
         fileIds: [fileId],
       }),
     });
 
     if (!kbResponse.ok) {
-      const errorText = await kbResponse.text();
-      console.error('❌ Knowledge base creation failed:', errorText);
-      throw new Error('Failed to create knowledge base');
+      const error1 = await kbResponse.text();
+      console.log('❌ Structure 1 failed:', error1);
+      
+      // Try structure 2: With provider
+      console.log('🔄 Trying structure 2: { provider: "canonical", fileIds: [...] }');
+      kbResponse = await fetch('https://api.vapi.ai/knowledge-base', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${VAPI_API_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          provider: 'canonical',
+          fileIds: [fileId],
+        }),
+      });
+
+      if (!kbResponse.ok) {
+        const error2 = await kbResponse.text();
+        console.log('❌ Structure 2 failed:', error2);
+        
+        // Try structure 3: Array of file IDs
+        console.log('🔄 Trying structure 3: { fileIds: ["..."] } (string array)');
+        kbResponse = await fetch('https://api.vapi.ai/knowledge-base', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${VAPI_API_KEY}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            fileIds: [fileId.toString()],
+          }),
+        });
+
+        if (!kbResponse.ok) {
+          const error3 = await kbResponse.text();
+          console.error('❌ All structures failed. Errors:', { error1, error2, error3 });
+          throw new Error('Failed to create knowledge base - all API structures rejected');
+        }
+      }
     }
 
     const kbData = await kbResponse.json();
     const knowledgeBaseId = kbData.id;
-    console.log('✅ Knowledge base created:', knowledgeBaseId);
+    console.log('✅ Knowledge base created successfully:', knowledgeBaseId);
 
     // ========================================
     // UPDATE ASSISTANT TO USE NEW KNOWLEDGE BASE
@@ -186,7 +221,6 @@ async function updateKnowledgeBase(req, res) {
       if (!assistantResponse.ok) {
         const errorText = await assistantResponse.text();
         console.error('⚠️ Assistant update warning:', errorText);
-        // Don't throw - knowledge base is created, just log warning
       } else {
         console.log('✅ Assistant updated with new knowledge base');
       }
@@ -204,7 +238,7 @@ async function updateKnowledgeBase(req, res) {
         knowledge_base_id: knowledgeBaseId,
         knowledge_base_data: {
           ...finalData,
-          websiteContent: websiteContent, // Cache website content
+          websiteContent: websiteContent,
         },
         knowledge_base_updated_at: new Date().toISOString(),
         website_url: websiteUrl || client.website_url,
