@@ -1,14 +1,8 @@
 // ====================================================================
-// VAPI ASSISTANT CONFIGURATION - Industry-Specific Templates (V3.0)
+// VAPI ASSISTANT CONFIGURATION - Industry-Specific Templates (V3.1)
 // ====================================================================
-// FULLY CORRECTED BASED ON VAPI API DOCUMENTATION:
-// - transferCall as TOOL in model.tools array (not transferPlan)
-// - ElevenLabs voice provider (not Azure)
-// - analysisPlan with enabled: true
-// - knowledgeBaseId at top level (not nested in model)
-// - All 5 industries with professional conversational prompts
-// - Recording disclosure in all greetings
-// - Structured actionable summaries
+// FIXED: Simplified summary prompts to prevent AI overload
+// All other configurations remain the same
 // ====================================================================
 
 const fetch = require('node-fetch');
@@ -22,13 +16,12 @@ const INDUSTRY_MAPPING = {
   'Restaurants/Food Service': 'restaurants'
 };
 
-// ElevenLabs Voice IDs - High Quality Voices
-// You can replace these with your own cloned voices or other ElevenLabs voices
+// ElevenLabs Voice IDs
 const VOICES = {
-  male_professional: '29vD33N1CtxCmqQRPOHJ',  // Drew - Deep, authoritative
-  female_warm: '21m00Tcm4TlvDq8ikWAM',        // Rachel - Warm, friendly
-  male_friendly: '2EiwWnXFnvU5JabPnv8n',      // Clyde - Conversational
-  female_soft: 'EXAVITQu4vr4xnSDxMaL'         // Bella - Soft, expressive
+  male_professional: '29vD33N1CtxCmqQRPOHJ',
+  female_warm: '21m00Tcm4TlvDq8ikWAM',
+  male_friendly: '2EiwWnXFnvU5JabPnv8n',
+  female_soft: 'EXAVITQu4vr4xnSDxMaL'
 };
 
 // ====================================================================
@@ -41,7 +34,7 @@ const INDUSTRY_CONFIGS = {
   // 1. HOME SERVICES
   // ================================================================
   home_services: {
-    voiceId: VOICES.male_friendly,  // Clyde - friendly male
+    voiceId: VOICES.male_friendly,
     temperature: 0.7,
     
     systemPrompt: (businessName) => `You are the AI phone assistant for ${businessName}, a home services company. You handle calls naturally and professionally, just like a skilled human receptionist would.
@@ -129,48 +122,13 @@ REMEMBER:
 
     firstMessage: (businessName) => `Thanks for calling ${businessName}! Just so you know, this call may be recorded for quality and training purposes. How can I help you today?`,
     
-    summaryPrompt: `You are analyzing a home services call. Create a structured summary that gives the business owner everything they need to know at a glance.
+    // ✅ SIMPLIFIED SUMMARY PROMPT
+    summaryPrompt: `Summarize this home services call in 2-3 clear sentences covering:
+1. Customer name, phone number, and property address
+2. What problem or service they need (be specific about the issue)
+3. Urgency level (emergency/urgent/routine) and what action is needed next
 
-Use this EXACT format:
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━
-📞 CALL SUMMARY
-━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-👤 CUSTOMER INFO:
-• Name: [Full name or "Not provided"]
-• Phone: [Phone number]
-• Email: [If provided, else "Not provided"]
-• Address: [Full service address]
-
-🔧 SERVICE REQUEST:
-• Type: [Plumbing/HVAC/Electrical/etc.]
-• Issue: [Detailed description of the problem in 1-2 sentences]
-• When Started: [When problem began, if mentioned]
-
-⚠️ URGENCY LEVEL: [EMERGENCY 🔴 / URGENT 🟡 / ROUTINE 🟢]
-Reason: [Brief explanation of urgency]
-
-🎯 NEXT ACTION REQUIRED:
-[Clear, specific action: "Call back within 1 hour to schedule emergency visit" or "Schedule routine appointment this week"]
-
-💰 REVENUE POTENTIAL: [HIGH 💰💰💰 / MEDIUM 💰💰 / LOW 💰]
-Reason: [Brief reason - e.g., "Large HVAC replacement", "Simple repair", etc.]
-
-😊 CUSTOMER SENTIMENT: [SATISFIED ✅ / NEUTRAL ➖ / FRUSTRATED ❌]
-Notes: [Any emotional context - worried, angry, pleasant, etc.]
-
-📝 ADDITIONAL NOTES:
-[Any special instructions, gate codes, access info, or important context]
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-IMPORTANT:
-- Be specific and actionable
-- Include ALL contact information captured
-- Flag emergencies clearly
-- Note if customer mentioned competitors or price shopping
-- Highlight any red flags (rude, potential non-payer, unrealistic expectations)`,
+Include any special notes like gate codes, access instructions, or customer concerns. Be direct and actionable.`,
 
     structuredDataSchema: {
       type: 'object',
@@ -230,7 +188,7 @@ IMPORTANT:
   // 2. MEDICAL/DENTAL
   // ================================================================
   medical: {
-    voiceId: VOICES.female_soft,  // Bella - calm, empathetic
+    voiceId: VOICES.female_soft,
     temperature: 0.6,
     
     systemPrompt: (businessName) => `You are the receptionist for ${businessName}, a medical or dental practice. You're the calming, professional voice that patients hear when they call.
@@ -354,54 +312,13 @@ REMEMBER:
 
     firstMessage: (businessName) => `Thank you for calling ${businessName}. This call may be recorded. Are you a current patient with us, or would this be your first visit?`,
     
-    summaryPrompt: `You are analyzing a medical/dental practice call. Create a structured summary for the healthcare team.
+    // ✅ SIMPLIFIED SUMMARY PROMPT
+    summaryPrompt: `Summarize this medical/dental call in 2-3 sentences:
+1. Patient name, phone, date of birth (if provided), and whether they're new or existing
+2. General reason for calling (HIPAA-compliant - no specific medical details)
+3. Urgency level and what action is needed (schedule appointment, callback, etc.)
 
-Use this EXACT format:
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━
-📞 PATIENT CALL SUMMARY
-━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-👤 PATIENT INFO:
-• Name: [Full name]
-• DOB: [Date of birth if provided]
-• Phone: [Phone number]
-• Email: [If provided]
-• Patient Type: [NEW PATIENT 🆕 / EXISTING PATIENT 👥]
-
-🏥 VISIT REASON:
-[General reason for visit in 1-2 sentences - NO specific medical details per HIPAA]
-
-⚠️ URGENCY LEVEL: [EMERGENCY 🔴 / URGENT 🟡 / ROUTINE 🟢]
-Reason: [Brief explanation]
-
-💳 INSURANCE:
-• Has Insurance: [YES / NO / NOT DISCUSSED]
-• Provider: [If mentioned]
-
-🎯 NEXT ACTION REQUIRED:
-[Specific action: "Schedule new patient appointment", "Call back for urgent same-day visit", "Routine scheduling", etc.]
-
-📅 SCHEDULING PREFERENCE:
-• Timing: [When they want to be seen]
-• Availability: [Day/time preferences if mentioned]
-
-😊 PATIENT SENTIMENT: [CALM ✅ / ANXIOUS 😟 / DISTRESSED 😰 / UPSET 😠]
-Notes: [Emotional state, concerns expressed, level of urgency in their voice]
-
-📝 ADDITIONAL NOTES:
-[Important context: referral source, special accommodations needed, language barriers, mobility issues, etc.]
-
-⚠️ RED FLAGS:
-[Any concerns: potential emergency ignored, very angry, threatening language, etc.]
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-REMEMBER:
-- Protect HIPAA - keep medical details general
-- Flag true emergencies that need immediate attention
-- Note if patient seems high-risk or confused
-- Include any special needs or accommodations mentioned`,
+Note any insurance questions or special accommodations mentioned.`,
 
     structuredDataSchema: {
       type: 'object',
@@ -465,7 +382,7 @@ REMEMBER:
   // 3. RETAIL/E-COMMERCE
   // ================================================================
   retail: {
-    voiceId: VOICES.female_warm,  // Rachel - upbeat, friendly
+    voiceId: VOICES.female_warm,
     temperature: 0.8,
     
     systemPrompt: (businessName) => `You are the phone assistant for ${businessName}, a retail store. You're the enthusiastic, helpful voice that makes customers excited to shop.
@@ -586,55 +503,13 @@ REMEMBER:
 
     firstMessage: (businessName) => `Thanks for calling ${businessName}! This call may be recorded. How can I help you today?`,
     
-    summaryPrompt: `You are analyzing a retail store call. Create a structured summary focused on customer needs and sales opportunity.
+    // ✅ SIMPLIFIED SUMMARY PROMPT
+    summaryPrompt: `Summarize this retail call in 2-3 sentences:
+1. Customer name and phone number
+2. What they're calling about (product inquiry, stock check, store info, return, order, or complaint)
+3. Specific products mentioned and whether they're coming in or need a callback
 
-Use this EXACT format:
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━
-📞 RETAIL CALL SUMMARY
-━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-👤 CUSTOMER INFO:
-• Name: [Name or "Not provided"]
-• Phone: [Phone number]
-• Email: [If provided]
-
-🛍️ CALL PURPOSE: [PRODUCT INQUIRY 🔍 / STOCK CHECK 📦 / STORE INFO ℹ️ / RETURN 🔄 / ORDER 🛒 / COMPLAINT ⚠️]
-
-📝 DETAILS:
-[Specific description of what customer needs/wants in 2-3 sentences]
-
-🏷️ PRODUCTS MENTIONED:
-• [Product 1]
-• [Product 2]
-• [etc.]
-
-⚠️ URGENCY: [HIGH 🔴 / MEDIUM 🟡 / LOW 🟢]
-Reason: [Why - need it today, special occasion, just browsing, etc.]
-
-🎯 NEXT ACTION REQUIRED:
-[Clear action: "Check inventory on Nike shoes size 10", "Process return", "Call back with pricing", etc.]
-
-💰 SALES OPPORTUNITY: [HIGH 💰💰💰 / MEDIUM 💰💰 / LOW 💰 / NONE]
-Reason: [Large purchase, repeat customer, just asking about hours, etc.]
-
-😊 CUSTOMER SENTIMENT: [EXCITED 😊 / NEUTRAL 😐 / FRUSTRATED 😠]
-Notes: [Happy, price shopping, complained about XYZ, etc.]
-
-🏪 VISIT INTENT:
-• Planning to visit? [YES - TODAY / YES - THIS WEEK / MAYBE / NO]
-• Reason: [Browse, specific purchase, return, etc.]
-
-📝 ADDITIONAL NOTES:
-[Any important context: mentioned competitor, asked about loyalty program, special requests, complained about service, etc.]
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-IMPORTANT:
-- Flag high-value sales opportunities
-- Note if customer is price shopping or mentioned competitors
-- Include any complaints or service issues
-- Highlight if customer is coming in today (hot lead)`,
+Note any high-value sales opportunities or competitor mentions.`,
 
     structuredDataSchema: {
       type: 'object',
@@ -690,10 +565,10 @@ IMPORTANT:
   },
 
   // ================================================================
-  // 4. PROFESSIONAL SERVICES (Legal, Accounting, Consulting)
+  // 4. PROFESSIONAL SERVICES
   // ================================================================
   professional_services: {
-    voiceId: VOICES.male_professional,  // Drew - authoritative, trustworthy
+    voiceId: VOICES.male_professional,
     temperature: 0.6,
     
     systemPrompt: (businessName) => `You are the receptionist for ${businessName}, a professional services firm. You're the polished, professional first impression that clients experience.
@@ -850,64 +725,13 @@ REMEMBER:
 
     firstMessage: (businessName) => `Thank you for calling ${businessName}. This call may be recorded for quality assurance. How may I assist you today?`,
     
-    summaryPrompt: `You are analyzing a professional services firm call. Create a structured summary for the legal/accounting/consulting team.
+    // ✅ SIMPLIFIED SUMMARY PROMPT
+    summaryPrompt: `Summarize this professional services call in 2-3 sentences:
+1. Client name, phone, company (if business), and whether they're new or existing
+2. General type of matter (no confidential details - just broad category like "litigation", "tax", "business consulting")
+3. Urgency level (critical deadline vs. routine) and next action needed
 
-Use this EXACT format:
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━
-📞 CLIENT CALL SUMMARY
-━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-👤 CLIENT INFO:
-• Name: [Full name]
-• Company: [If business client, else "Individual"]
-• Phone: [Phone number]
-• Email: [Email address]
-• Client Type: [NEW CLIENT 🆕 / EXISTING CLIENT 👥 / REFERRAL 🤝]
-
-⚖️ MATTER TYPE:
-[General description of the legal/accounting/consulting matter in 1-2 sentences]
-Category: [Litigation, Corporate, Tax, Estate Planning, Business Consulting, etc.]
-
-⚠️ URGENCY LEVEL: [CRITICAL ⚡ / URGENT 🟡 / IMPORTANT 🔵 / ROUTINE 🟢]
-Reason: [Court deadline, IRS deadline, time-sensitive transaction, etc.]
-
-💼 MATTER COMPLEXITY: [HIGH 🔺 / MEDIUM 🔶 / LOW 🔹]
-Assessment: [Based on description - complex litigation vs. simple consultation]
-
-🎯 NEXT ACTION REQUIRED:
-[Specific action: "Schedule consultation for Tuesday", "Partner callback within 24 hours", "Conflict check required", etc.]
-
-📅 CONSULTATION STATUS:
-• Scheduled: [YES - Date/Time / PENDING / NOT REQUESTED]
-• Consultation Fee: [DISCUSSED / NOT DISCUSSED]
-
-💰 REVENUE POTENTIAL: [HIGH 💰💰💰 / MEDIUM 💰💰 / LOW 💰]
-Reason: [Complex case, high-value client, simple matter, pro bono candidate, etc.]
-
-🤝 REFERRAL SOURCE:
-[How they found the firm: existing client referral, Google, lawyer referral service, past client, etc.]
-
-😊 CLIENT SENTIMENT: [PROFESSIONAL ✅ / CONCERNED 😟 / DISTRESSED 😰 / HOSTILE 😠]
-Notes: [Emotional state, professionalism level, red flags]
-
-⚠️ CONFLICTS CHECK NEEDED: [YES ⚠️ / NO]
-Parties: [Other parties mentioned that require conflict checking]
-
-📝 ADDITIONAL NOTES:
-[Important context: other firms contacted, budget mentioned, special circumstances, accessibility needs, language barriers, prior legal issues, etc.]
-
-🚩 RED FLAGS:
-[Any concerns: unrealistic expectations, potential non-payment risk, extremely emotional, threatening, potential vexatious litigant, conflict of interest, statute of limitations issue, etc.]
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-CRITICAL REMINDERS:
-- Protect attorney-client privilege - keep details general
-- Flag time-sensitive deadlines prominently
-- Note high-value or prestigious potential clients
-- Identify red flags early
-- Include any conflict check requirements`,
+Note if this is a referral and from whom. Keep it confidential and professional.`,
 
     structuredDataSchema: {
       type: 'object',
@@ -982,10 +806,10 @@ CRITICAL REMINDERS:
   },
 
   // ================================================================
-  // 5. RESTAURANTS/FOOD SERVICE
+  // 5. RESTAURANTS
   // ================================================================
   restaurants: {
-    voiceId: VOICES.female_warm,  // Rachel - warm, enthusiastic
+    voiceId: VOICES.female_warm,
     temperature: 0.8,
     
     systemPrompt: (businessName) => `You are the phone assistant for ${businessName}, a restaurant. You're the warm, welcoming voice that makes people hungry and excited to dine with you.
@@ -1184,71 +1008,13 @@ REMEMBER:
 
     firstMessage: (businessName) => `Thank you for calling ${businessName}! This call may be recorded. How can I help you today – reservation, takeout order, or would you like to hear about our menu?`,
     
-    summaryPrompt: `You are analyzing a restaurant call. Create a structured summary for the restaurant team.
+    // ✅ SIMPLIFIED SUMMARY PROMPT
+    summaryPrompt: `Summarize this restaurant call in 2-3 sentences:
+1. Customer name and phone
+2. What they need (reservation, takeout, delivery, catering, or menu question)
+3. Key details: For reservations (party size, date, time, special occasion). For orders (items ordered, pickup time). For catering (event date, guest count).
 
-Use this EXACT format:
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━
-📞 RESTAURANT CALL SUMMARY
-━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-👤 CUSTOMER INFO:
-• Name: [Name]
-• Phone: [Phone number]
-
-🍽️ CALL PURPOSE: [RESERVATION 📅 / TAKEOUT 🥡 / DELIVERY 🚗 / MENU QUESTION ❓ / CATERING 🎉 / HOURS/INFO ℹ️]
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━
-RESERVATION DETAILS (if applicable):
-━━━━━━━━━━━━━━━━━━━━━━━━━━━
-• Date: [Day, Date]
-• Time: [Time]
-• Party Size: [Number] people
-• Special Occasion: [Birthday, Anniversary, etc. or "None"]
-• Special Requests: [Table preference, dietary needs, etc. or "None"]
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━
-TAKEOUT/DELIVERY ORDER (if applicable):
-━━━━━━━━━━━━━━━━━━━━━━━━━━━
-• Order Items:
-  - [Item 1 with any modifications]
-  - [Item 2 with any modifications]
-  - [etc.]
-• Pickup Time: [Time]
-• Delivery Address: [If delivery]
-• Special Instructions: [Extra sauce, allergies, etc.]
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━
-CATERING INQUIRY (if applicable):
-━━━━━━━━━━━━━━━━━━━━━━━━━━━
-• Event Date: [Date]
-• Guest Count: [Number]
-• Event Type: [Corporate, wedding, party, etc.]
-• Budget: [If mentioned]
-• Email: [For catering follow-up]
-
-⚠️ URGENCY: [IMMEDIATE 🔴 / TODAY 🟡 / FUTURE 🟢]
-
-😊 CUSTOMER SENTIMENT: [EXCITED 😊 / FRIENDLY 😃 / NEUTRAL 😐 / FRUSTRATED 😠]
-Notes: [First-time caller, regular customer, special occasion, complained about something, etc.]
-
-💰 ESTIMATED VALUE: [HIGH 💰💰💰 / MEDIUM 💰💰 / LOW 💰]
-Reason: [Large party reservation, big takeout order, catering inquiry, just asking about hours, etc.]
-
-📝 ADDITIONAL NOTES:
-[Important context: dietary restrictions, accessibility needs, mentioned coming for special occasion, asked about private dining, expressed interest in weekly catering, etc.]
-
-🚨 FOLLOW-UP REQUIRED:
-[Specific action: "Call back with menu info", "Confirm reservation 24 hours ahead", "Catering manager must call today", "Check with chef about gluten-free options", etc.]
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-CRITICAL REMINDERS:
-- Double-check all orders for accuracy
-- Flag special occasions prominently (team needs to know!)
-- Note all dietary restrictions/allergies clearly
-- Include callback number for every reservation and order
-- Highlight high-value catering opportunities`,
+Note any dietary restrictions or special requests.`,
 
     structuredDataSchema: {
       type: 'object',
@@ -1270,7 +1036,6 @@ CRITICAL REMINDERS:
           enum: ['reservation', 'takeout', 'delivery', 'catering', 'menu_question', 'hours_location', 'complaint'],
           description: 'Primary purpose of the call'
         },
-        // RESERVATION DATA
         party_size: {
           type: 'integer',
           description: 'Number of guests for reservation'
@@ -1287,7 +1052,6 @@ CRITICAL REMINDERS:
           type: 'string',
           description: 'Birthday, anniversary, proposal, etc.'
         },
-        // ORDER DATA
         order_items: {
           type: 'array',
           items: { type: 'string' },
@@ -1301,7 +1065,6 @@ CRITICAL REMINDERS:
           type: 'string',
           description: 'Full delivery address if applicable'
         },
-        // DIETARY & SPECIAL REQUESTS
         dietary_restrictions: {
           type: 'string',
           description: 'Allergies, vegetarian, vegan, gluten-free, etc.'
@@ -1310,7 +1073,6 @@ CRITICAL REMINDERS:
           type: 'string',
           description: 'Table preferences, accessibility needs, special preparations, etc.'
         },
-        // CATERING DATA
         catering_event_date: {
           type: 'string',
           description: 'Date of catered event'
@@ -1323,7 +1085,6 @@ CRITICAL REMINDERS:
           type: 'string',
           description: 'Budget range mentioned for catering'
         },
-        // GENERAL
         urgency: { 
           type: 'string',
           enum: ['immediate', 'today', 'this_week', 'future'],
@@ -1350,7 +1111,6 @@ CRITICAL REMINDERS:
 // ====================================================================
 
 function getIndustryConfig(industryFromGHL, businessName, knowledgeBaseId = null, ownerPhone = null) {
-  // Map GHL value to internal key
   const industryKey = INDUSTRY_MAPPING[industryFromGHL] || 'professional_services';
   const config = INDUSTRY_CONFIGS[industryKey];
   
@@ -1359,7 +1119,6 @@ function getIndustryConfig(industryFromGHL, businessName, knowledgeBaseId = null
     return getIndustryConfig('Professional Services (legal, accounting)', businessName, knowledgeBaseId, ownerPhone);
   }
 
-  // Build transfer call tool if owner phone provided
   const transferTool = ownerPhone ? {
     type: 'transferCall',
     destinations: [
@@ -1382,7 +1141,6 @@ function getIndustryConfig(industryFromGHL, businessName, knowledgeBaseId = null
     ]
   } : null;
 
-  // Build complete VAPI assistant configuration
   return {
     name: `${businessName} AI Receptionist`,
     
@@ -1390,13 +1148,11 @@ function getIndustryConfig(industryFromGHL, businessName, knowledgeBaseId = null
       provider: 'openai',
       model: 'gpt-4',
       temperature: config.temperature,
-      // Knowledge base ID goes here in model
       ...(knowledgeBaseId && { knowledgeBaseId: knowledgeBaseId }),
       messages: [{ 
         role: 'system', 
         content: config.systemPrompt(businessName)
       }],
-      // Add transfer tool if available
       ...(transferTool && {
         tools: [transferTool]
       })
@@ -1412,14 +1168,11 @@ function getIndustryConfig(industryFromGHL, businessName, knowledgeBaseId = null
     endCallPhrases: ['goodbye', 'bye', 'thank you bye', 'that\'s all', 'have a good day'],
     recordingEnabled: true,
     
-    // SERVER MESSAGES
     serverMessages: ['end-of-call-report', 'transcript', 'status-update'],
     
-    // ANALYSIS PLAN - CORRECT STRUCTURE WITH enabled: true
     analysisPlan: {
-      // Summary configuration
       summaryPlan: {
-        enabled: true,  // ✅ CRITICAL: Must be true
+        enabled: true,
         timeoutSeconds: 30,
         messages: [{
           role: 'system',
@@ -1427,9 +1180,8 @@ function getIndustryConfig(industryFromGHL, businessName, knowledgeBaseId = null
         }]
       },
       
-      // Structured data extraction
       structuredDataPlan: {
-        enabled: true,  // ✅ CRITICAL: Must be true
+        enabled: true,
         timeoutSeconds: 30,
         schema: config.structuredDataSchema,
         messages: [{
@@ -1450,8 +1202,6 @@ async function createIndustryAssistant(businessName, industry, knowledgeBaseId =
     console.log(`🎯 Creating ${industry} assistant for ${businessName}`);
     
     const config = getIndustryConfig(industry, businessName, knowledgeBaseId, ownerPhone);
-    
-    // Add server URL
     config.serverUrl = serverUrl || process.env.BACKEND_URL + '/webhook/vapi';
     
     console.log(`📝 Industry: ${INDUSTRY_MAPPING[industry] || 'default'}`);
