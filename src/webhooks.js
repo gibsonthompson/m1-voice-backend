@@ -300,10 +300,10 @@ async function sendGHLSMS(toPhone, message, businessOwnerName = null) {
 }
 
 // ============================================
-// TRANSCRIPT EXTRACTION FUNCTIONS
+// TRANSCRIPT EXTRACTION FUNCTIONS (FALLBACKS)
 // ============================================
 
-// Extract customer name from transcript
+// Extract customer name from transcript (fallback)
 function extractCustomerName(transcript) {
   const patterns = [
     /my name is (\w+(?:\s+\w+)?)/i,
@@ -328,7 +328,7 @@ function extractCustomerName(transcript) {
   return 'Unknown';
 }
 
-// Extract phone number from transcript
+// Extract phone number from transcript (fallback)
 function extractPhoneNumber(transcript) {
   const phonePattern = /(\+?1?\s*\(?[2-9]\d{2}\)?[\s.-]?\d{3}[\s.-]?\d{4})/;
   const match = transcript.match(phonePattern);
@@ -342,26 +342,26 @@ function extractPhoneNumber(transcript) {
   return null;
 }
 
-// Extract email from transcript
+// Extract email from transcript (fallback)
 function extractEmail(transcript) {
   const emailPattern = /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/;
   const match = transcript.match(emailPattern);
   return match ? match[0] : null;
 }
 
-// Detect urgency level
+// Detect urgency level (fallback)
 function detectUrgency(transcript) {
   const lowerTranscript = transcript.toLowerCase();
   
   const emergencyWords = ['emergency', 'urgent', 'asap', 'immediately', 'right now', 'critical', 'serious'];
   const hasEmergency = emergencyWords.some(word => lowerTranscript.includes(word));
-  if (hasEmergency) return 'HIGH';
+  if (hasEmergency) return 'high';
   
   const mediumWords = ['soon', 'quickly', 'today', 'this week'];
   const hasMedium = mediumWords.some(word => lowerTranscript.includes(word));
-  if (hasMedium) return 'MEDIUM';
+  if (hasMedium) return 'medium';
   
-  return 'NORMAL';
+  return 'routine';
 }
 
 // ============================================
@@ -401,7 +401,7 @@ async function handleVapiWebhook(req, res) {
       console.log('✅ Client found:', client.business_name);
       
       // ============================================
-      // 🆕 HARD BLOCK: CHECK CALL LIMITS BEFORE PROCESSING
+      // CHECK CALL LIMITS BEFORE PROCESSING
       // ============================================
       const currentCallCount = client.calls_this_month || 0;
       const callLimit = client.monthly_call_limit || 100;
@@ -433,53 +433,68 @@ async function handleVapiWebhook(req, res) {
       console.log(`✅ Within limit, processing call...`);
       
       // ============================================
-      // CONTINUE WITH NORMAL CALL PROCESSING
+      // 🆕 EXTRACT DATA FROM VAPI ANALYSIS (FIXED)
       // ============================================
       const transcript = message.transcript || '';
       const callerPhone = call.customer?.number || 'Unknown';
       
+      // 🔍 LOG RAW ANALYSIS DATA FOR DEBUGGING
+      console.log('🔍 RAW ANALYSIS DATA:', JSON.stringify(message.analysis, null, 2));
+      
       // Use VAPI's analysis if available
       const analysis = message.analysis || {};
-      const customerName = analysis.structuredData?.customerName || 
+      
+      // ✅ FIX: Use snake_case field names (customer_name, not customerName)
+      const customerName = analysis.structuredData?.customer_name || 
                           extractCustomerName(transcript);
-      const customerPhone = analysis.structuredData?.customerPhone || 
+      const customerPhone = analysis.structuredData?.customer_phone || 
                            extractPhoneNumber(transcript) || 
                            callerPhone;
-      const customerEmail = extractEmail(transcript);
+      const customerEmail = analysis.structuredData?.customer_email || 
+                           extractEmail(transcript);
       const urgency = analysis.structuredData?.urgency || 
                      detectUrgency(transcript);
-      const serviceType = analysis.structuredData?.serviceType || null;
+      const serviceType = analysis.structuredData?.service_type || null;
       
-      // Build smart summary
-      let aiSummary = '';
-      if (customerName && customerName !== 'Unknown') {
-        aiSummary = `${customerName} called`;
-      } else {
-        aiSummary = 'Customer called';
+      // ✅ FIX: Use VAPI's summary directly (don't build our own)
+      let aiSummary = analysis.summary || '';
+      
+      // Fallback: If VAPI didn't generate summary or it's generic, build basic one
+      if (!aiSummary || aiSummary.toLowerCase().includes('unknown')) {
+        console.log('⚠️ VAPI summary missing or generic, building fallback summary');
+        if (customerName && customerName !== 'Unknown') {
+          aiSummary = `${customerName} called`;
+        } else {
+          aiSummary = 'Customer called';
+        }
+        if (serviceType) {
+          aiSummary += ` about ${serviceType}`;
+        }
+        if (urgency === 'high' || urgency === 'emergency') {
+          aiSummary += ' (URGENT)';
+        }
+        if (customerPhone && customerPhone !== 'Unknown') {
+          aiSummary += `. Contact: ${customerPhone}`;
+        }
+        aiSummary = aiSummary.trim() + '.';
       }
-      if (serviceType) {
-        aiSummary += ` about ${serviceType}`;
-      }
-      if (analysis.structuredData?.appointmentRequested) {
-        aiSummary += ' - requested appointment';
-      }
-      if (urgency === 'HIGH' || urgency === 'high') {
-        aiSummary += ' (URGENT)';
-      }
-      if (customerPhone && customerPhone !== 'Unknown') {
-        aiSummary += `. Contact: ${customerPhone}`;
-      }
-      aiSummary = aiSummary.trim() + '.';
+      
+      console.log('📊 Extracted data:');
+      console.log('   Customer Name:', customerName);
+      console.log('   Customer Phone:', customerPhone);
+      console.log('   Customer Email:', customerEmail);
+      console.log('   Service Type:', serviceType);
+      console.log('   Urgency:', urgency);
+      console.log('   Summary:', aiSummary);
 
       // ============================================
-      // 🎵 EXTRACT RECORDING URL FROM VAPI
+      // EXTRACT RECORDING URL FROM VAPI
       // ============================================
-      // VAPI can send recording URL in multiple places
       const recordingUrl = 
-        message.recordingUrl ||           // Top level
-        message.artifact?.recordingUrl || // In artifact
-        call.recordingUrl ||              // In call object
-        message.recording?.url ||         // In recording object
+        message.recordingUrl ||
+        message.artifact?.recordingUrl ||
+        call.recordingUrl ||
+        message.recording?.url ||
         null;
       
       if (recordingUrl) {
@@ -488,21 +503,20 @@ async function handleVapiWebhook(req, res) {
         console.log('⚠️ No recording URL in webhook payload');
       }
 
-      // Save to database
+      // ============================================
+      // SAVE TO DATABASE
+      // ============================================
       const callRecord = {
         client_id: client.id,
         customer_name: customerName,
         customer_phone: customerPhone,
         ai_summary: aiSummary,
         transcript: transcript,
-        recording_url: recordingUrl, // 🆕 Save recording URL
+        recording_url: recordingUrl,
         created_at: new Date().toISOString()
       };
       
       console.log('💾 Saving call to Supabase...');
-      console.log('   Customer:', customerName);
-      console.log('   Phone:', customerPhone);
-      console.log('   Urgency:', urgency);
       
       const { data: insertedCall, error: insertError } = await supabase
         .from('calls')
@@ -579,7 +593,7 @@ async function handleVapiWebhook(req, res) {
           if (customerEmail) {
             smsMessage += `Email: ${customerEmail}\n`;
           }
-          if (urgency === 'HIGH') {
+          if (urgency === 'high' || urgency === 'emergency') {
             smsMessage += `⚠️ Urgency: HIGH\n`;
           }
           smsMessage += `\nSummary: ${aiSummary}\n\n`;
@@ -607,12 +621,13 @@ async function handleVapiWebhook(req, res) {
         callId: insertedCall[0]?.id,
         smsSent: smsSent,
         usageTracked: true,
-        recordingUrl: recordingUrl, // 🆕 Return recording URL in response
+        recordingUrl: recordingUrl,
         extractedData: {
           customerName,
           customerPhone,
           customerEmail,
           urgency,
+          serviceType,
           summary: aiSummary
         }
       });
