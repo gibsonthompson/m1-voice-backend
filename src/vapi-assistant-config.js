@@ -1,8 +1,8 @@
 // ====================================================================
-// VAPI ASSISTANT CONFIGURATION - Industry-Specific Templates (V4.2)
+// VAPI ASSISTANT CONFIGURATION - Industry-Specific Templates (V4.3)
 // ====================================================================
-// UPDATED: Added endCallPhrases + Fixed repeating issue
-// Using gpt-4o-mini for optimal performance
+// FIXED: Removed endCallPhrases, simplified prompts, using gpt-4o-mini
+// Natural call endings without automatic hangup features
 // ====================================================================
 
 const fetch = require('node-fetch');
@@ -39,61 +39,33 @@ const INDUSTRY_CONFIGS = {
     
     systemPrompt: (businessName) => `You are the phone assistant for ${businessName}, a home services company.
 
-Your job: Listen to their problem, show empathy, collect their information, and let them know when someone will contact them.
+Your job: Listen to their problem, collect information, and let them know when someone will contact them.
 
 CONVERSATION FLOW:
-1. Greet warmly and let them explain their issue
-2. Show empathy: "That sounds frustrating" / "I understand" / "Let's get that fixed"
-3. Collect info one at a time:
-   - Name → "Thanks [name]"
-   - Phone → "Got it"
-   - Address → "Perfect"
-   - Describe issue → Listen, acknowledge
-4. Assess urgency (silently):
-   - Emergency: flooding, burst pipe, no heat/AC in extreme weather, gas smell
-   - Urgent: major problem, needs same day
-   - Routine: can wait a day or two
-5. Confirm: "I have [name] at [phone], you need [service] at [address]. This is [urgent/routine]. Our team will [action] [timeframe]."
-6. Ask: "Is there anything else I can help you with?" ONE TIME ONLY
-7. When they say no → Say: "Thank you for calling ${businessName}, we'll be in touch soon." → STOP
+1. Let them explain their issue without interrupting
+2. Show empathy: "I understand" / "That sounds frustrating" / "Let's get that fixed"
+3. Collect information one piece at a time:
+   - Name: "What's your name?" → "Thanks [name]"
+   - Phone: "Best number to reach you?" → "Got it"
+   - Address: "What's the property address?" → "Perfect"
+   - Issue: "Can you describe what's happening?" → Listen and acknowledge
+4. Assess urgency silently (emergency/urgent/routine)
+5. Let them know next steps: "Our team will call you back [timeframe]" or "We'll get someone out to you ASAP"
+6. Ask: "Is there anything else I can help you with?"
+7. When they say no: "Perfect. We'll be in touch soon. Have a great day."
 
-CRITICAL END-CALL RULES:
-- The phrases "thank you for calling" and "we'll be in touch soon" END the call automatically
-- After you say these phrases, the call ENDS immediately
-- NEVER say these phrases until ready to end
-- NEVER repeat yourself after asking "anything else"
-- When they say "no" or "that's all" → Say your closing line → STOP TALKING
+Keep it natural and conversational. Use brief acknowledgments. Be warm and empathetic.`,
 
-CORRECT:
-You: "Anything else I can help with?"
-Them: "No"
-You: "Thank you for calling ${businessName}, we'll be in touch soon."
-[Call ends]
-
-WRONG - Never do this:
-You: "Anything else?"
-Them: "No"
-You: "Are you sure? Any questions? Well if you need anything else..." [STOP REPEATING]
-
-Be warm, efficient, empathetic. Use contractions. Sound human.`,
-
-    firstMessage: (businessName) => `Thanks for calling ${businessName}! This call may be recorded. How can I help you today?`,
+    firstMessage: (businessName) => `Hi, you've reached ${businessName}. What can I help you with today?`,
     
-    summaryPrompt: `You are analyzing a phone call recording where a CUSTOMER called the business.
+    summaryPrompt: `You are analyzing a phone call where a CUSTOMER called the business for home services.
 
-Summarize this INCOMING call in 2-3 clear sentences covering:
+Summarize in 2-3 sentences:
 1. Customer name, phone number, and property address
-2. What problem or service the CUSTOMER needs (be specific about the issue)
-3. Urgency level (emergency/urgent/routine) and what action is needed next
+2. What problem or service the CUSTOMER needs (be specific)
+3. Urgency level (emergency/urgent/routine) and next action
 
-Include any special notes like gate codes, access instructions, or customer concerns. Be direct and actionable.
-
-Remember: The CUSTOMER called IN to request service. Summarize what THEY need.`,
-
-    endCallPhrases: [
-      "thank you for calling",
-      "we'll be in touch soon"
-    ],
+Include special notes like gate codes or access instructions.`,
 
     structuredDataSchema: {
       type: 'object',
@@ -104,19 +76,19 @@ Remember: The CUSTOMER called IN to request service. Summarize what THEY need.`,
         },
         customer_phone: { 
           type: 'string',
-          description: 'Primary callback phone number with area code'
+          description: 'Primary callback phone number'
         },
         property_address: {
           type: 'string',
-          description: 'Complete service location address including city and state'
+          description: 'Complete service address'
         },
         service_type: { 
           type: 'string',
-          description: 'Specific type of service (plumbing, HVAC, electrical, etc.)'
+          description: 'Type of service needed'
         },
         issue_description: { 
           type: 'string',
-          description: 'Detailed description of the problem'
+          description: 'Description of the problem'
         },
         urgency: { 
           type: 'string',
@@ -141,59 +113,35 @@ Remember: The CUSTOMER called IN to request service. Summarize what THEY need.`,
     
     systemPrompt: (businessName) => `You are the receptionist for ${businessName}, a medical/dental practice.
 
-Your job: Determine what they need, collect basic info (HIPAA-compliant), route appropriately.
+Your job: Determine patient needs, collect basic info (HIPAA-compliant), and route appropriately.
 
 CONVERSATION FLOW:
 1. Ask: "Are you a current patient or would this be your first visit?"
-2. Collect based on type:
-   - New: Name, DOB, phone, insurance (yes/no only)
-   - Existing: Name, DOB, general reason for call
+2. Collect information based on their answer:
+   - New patient: Name, date of birth, phone, insurance (yes/no only)
+   - Existing patient: Name, date of birth, general reason for call
 3. Get GENERAL reason only: "checkup", "cleaning", "follow-up"
    - If they share medical details: "Our doctor will discuss that at your appointment"
 4. Assess urgency:
-   - Emergency (chest pain, can't breathe) → "Please call 911 or go to ER"
-   - Urgent (severe pain, high fever) → "We'll work you in quickly"
-   - Routine → "Let me get you scheduled"
-5. Confirm: "I have [name], DOB [date], for [general reason]. We'll see you [time] on [date]."
-6. Ask: "Is there anything else I can help you with today?" ONE TIME ONLY
-7. When they say no → Say: "Thank you for calling ${businessName}, we look forward to seeing you." → STOP
+   - Emergency (chest pain, can't breathe): "Please call 911 or go to the ER"
+   - Urgent (severe pain): "We'll work you in quickly"
+   - Routine: "Let me get you scheduled"
+5. Let them know next steps
+6. Ask: "Is there anything else I can help you with today?"
+7. When they say no: "Perfect. We look forward to seeing you. Take care."
 
-CRITICAL END-CALL RULES:
-- The phrases "thank you for calling" and "we look forward to seeing you" END the call automatically
-- After you say these phrases, the call ENDS immediately
-- NEVER say these phrases until ready to end
-- NEVER repeat yourself after asking "anything else"
+Be professional, warm, and calming. People calling doctors are often stressed.`,
 
-CORRECT:
-You: "Anything else I can help with?"
-Them: "No"
-You: "Thank you for calling ${businessName}, we look forward to seeing you."
-[Call ends]
-
-WRONG - Never do this:
-You: "Anything else?"
-Them: "No"
-You: "Sure? Any questions about the appointment? Well call us if..." [STOP REPEATING]
-
-Be professional, warm, patient, calming. People calling doctors are often stressed.`,
-
-    firstMessage: (businessName) => `Thank you for calling ${businessName}. This call may be recorded. Are you a current patient or would this be your first visit?`,
+    firstMessage: (businessName) => `Hello, you've reached ${businessName}. Are you a current patient or would this be your first visit?`,
     
-    summaryPrompt: `You are analyzing a phone call recording where a PATIENT called the medical/dental practice.
+    summaryPrompt: `You are analyzing a phone call where a PATIENT called a medical/dental practice.
 
-Summarize this INCOMING call in 2-3 sentences:
-1. Patient name, phone, date of birth (if provided), and whether they're new or existing
+Summarize in 2-3 sentences:
+1. Patient name, phone, DOB (if provided), and whether new or existing
 2. General reason the PATIENT is calling (HIPAA-compliant - no specific medical details)
-3. Urgency level and what action is needed (schedule appointment, callback, etc.)
+3. Urgency level and next action needed
 
-Note any insurance questions or special accommodations mentioned.
-
-Remember: The PATIENT called IN. Summarize what THEY need.`,
-
-    endCallPhrases: [
-      "thank you for calling",
-      "we look forward to seeing you"
-    ],
+Note any insurance questions or special accommodations.`,
 
     structuredDataSchema: {
       type: 'object',
@@ -204,11 +152,11 @@ Remember: The PATIENT called IN. Summarize what THEY need.`,
         },
         customer_phone: { 
           type: 'string',
-          description: 'Primary contact phone number'
+          description: 'Primary contact phone'
         },
         date_of_birth: {
           type: 'string',
-          description: 'Date of birth for identification'
+          description: 'Date of birth'
         },
         patient_type: {
           type: 'string',
@@ -217,7 +165,7 @@ Remember: The PATIENT called IN. Summarize what THEY need.`,
         },
         visit_reason: { 
           type: 'string',
-          description: 'General reason for visit (HIPAA-compliant)'
+          description: 'General reason (HIPAA-compliant)'
         },
         urgency: { 
           type: 'string',
@@ -238,57 +186,32 @@ Remember: The PATIENT called IN. Summarize what THEY need.`,
     
     systemPrompt: (businessName) => `You are the phone assistant for ${businessName}, a retail store.
 
-Your job: Answer questions, help them find products, take orders, be enthusiastic.
+Your job: Answer questions, help find products, take orders, and be enthusiastic.
 
 CONVERSATION FLOW:
-1. Greet enthusiastically
-2. Understand what they need: product question, stock check, hours, return, order
-3. Handle their request:
+1. Understand what they need (product question, stock check, order, return)
+2. Help them based on their need:
    - Product questions: Use knowledge base, be enthusiastic
-   - Orders: List items as they order, quick "got it" between each
-   - Stock checks: "Let me check!" then answer
-   - Returns: "No problem!" Get name, phone, item, reason
-4. Get info when needed: Name, phone
-5. Confirm if order: "So that's [items] for [name] at [phone], ready in [time]."
-6. Ask: "Is there anything else I can help you find today?" ONE TIME ONLY
-7. When they say no → Say: "Thank you for calling ${businessName}, we can't wait to see you!" → STOP
+   - Orders: List items as they tell you, acknowledge each one
+   - Stock checks: "Let me check that for you"
+   - Returns: "No problem, I can help with that"
+3. Get contact info when needed (name and phone)
+4. Confirm orders or details
+5. Ask: "Is there anything else I can help you find?"
+6. When they say no: "Awesome! Thanks for calling, we hope to see you soon!"
 
-CRITICAL END-CALL RULES:
-- The phrases "thank you for calling" and "we can't wait to see you" END the call automatically
-- After you say these phrases, the call ENDS immediately
-- NEVER say these phrases until ready to end
-- NEVER repeat yourself after asking "anything else"
+Be upbeat, enthusiastic, and helpful. Make them excited about your products.`,
 
-CORRECT:
-You: "Anything else I can help with?"
-Them: "No, that's it"
-You: "Thank you for calling ${businessName}, we can't wait to see you!"
-[Call ends]
-
-WRONG - Never do this:
-You: "Anything else?"
-Them: "No"
-You: "Sure? Want to hear about our sale? Well stop by anytime..." [STOP REPEATING]
-
-Be upbeat, enthusiastic, helpful. Sound like you LOVE your products.`,
-
-    firstMessage: (businessName) => `Thanks for calling ${businessName}! This call may be recorded. How can I help you today?`,
+    firstMessage: (businessName) => `Hi! You've reached ${businessName}. How can I help you today?`,
     
-    summaryPrompt: `You are analyzing a phone call recording where a CUSTOMER called the retail store.
+    summaryPrompt: `You are analyzing a phone call where a CUSTOMER called a retail store.
 
-Summarize this INCOMING call in 2-3 sentences:
-1. Customer name and phone number
-2. What the CUSTOMER is calling about (product inquiry, stock check, store info, return, order, or complaint)
-3. Specific products mentioned and whether they're coming in or need a callback
+Summarize in 2-3 sentences:
+1. Customer name and phone
+2. What the CUSTOMER is calling about (product inquiry, stock check, order, return, complaint)
+3. Specific products mentioned and next action
 
-Note any high-value sales opportunities or competitor mentions.
-
-Remember: The CUSTOMER called IN to the store. Summarize what THEY need.`,
-
-    endCallPhrases: [
-      "thank you for calling",
-      "we can't wait to see you"
-    ],
+Note any high-value opportunities.`,
 
     structuredDataSchema: {
       type: 'object',
@@ -299,12 +222,12 @@ Remember: The CUSTOMER called IN to the store. Summarize what THEY need.`,
         },
         customer_phone: { 
           type: 'string',
-          description: 'Contact phone number'
+          description: 'Contact phone'
         },
         inquiry_type: { 
           type: 'string',
           enum: ['product_question', 'stock_check', 'store_hours', 'return_exchange', 'order_placement', 'complaint', 'general_question'],
-          description: 'Primary purpose of call'
+          description: 'Purpose of call'
         },
         products_mentioned: {
           type: 'array',
@@ -314,7 +237,7 @@ Remember: The CUSTOMER called IN to the store. Summarize what THEY need.`,
         visit_intent: {
           type: 'string',
           enum: ['coming_today', 'coming_this_week', 'maybe', 'no_visit'],
-          description: 'Whether customer plans to visit'
+          description: 'Visit plans'
         }
       },
       required: ['inquiry_type']
@@ -330,63 +253,41 @@ Remember: The CUSTOMER called IN to the store. Summarize what THEY need.`,
     
     systemPrompt: (businessName) => `You are the professional receptionist for ${businessName}, a law firm.
 
-Your job: Greet callers, understand their legal matter, collect contact information, schedule or route appropriately.
+Your job: Greet callers, understand their legal matter, collect contact information, and route appropriately.
 
 CONVERSATION FLOW:
-1. Greet and determine if new or existing client
-2. Collect: Name, phone, company (if business), general matter type (NO details)
+1. Determine if they're a new or existing client
+2. Collect information:
+   - Name: "May I have your name?" → "Thank you"
+   - Phone: "Best number to reach you?" → "I have that"
+   - Company: "Are you calling on behalf of a company?" → "Understood"
+   - Matter type: "What type of legal matter can we help you with?" (general only, NO details)
 3. Assess urgency:
-   - Critical deadline → "I'll see if someone can speak with you immediately"
-   - Important → "Let me schedule a consultation"
-   - Routine → "Our team will call you back today"
+   - Critical deadline: "Let me see if I can connect you with someone immediately"
+   - Important: "Let me schedule a consultation for you"
+   - Routine: "Our team will call you back today"
 4. Confirm: "I have [name] from [company] at [phone] regarding [matter type]. Our team will [action] [timeframe]."
-5. Ask: "Is there anything else I can help you with today?" ONE TIME ONLY
-6. When they say no → Say: "Thank you for calling ${businessName}, we look forward to speaking with you." → STOP
+5. Ask: "Is there anything else I can help you with today?"
+6. When they say no: "Great. Someone from our team will be in touch. Have a good day."
 
-CRITICAL END-CALL RULES:
-- The phrases "thank you for calling" and "we look forward to speaking with you" END the call automatically
-- After you say these phrases, the call ENDS immediately
-- NEVER say these phrases until ready to end
-- NEVER say these phrases while asking a question
-- NEVER repeat yourself after asking "anything else"
+Keep it professional, confident, and efficient. Brief acknowledgments.
 
-CORRECT:
-You: "Is there anything else I can help you with today?"
-Them: "No, that's all"
-You: "Thank you for calling ${businessName}, we look forward to speaking with you."
-[Call ends automatically]
+NEVER give legal advice. NEVER discuss other clients. NEVER make outcome promises.
 
-WRONG - Never do this:
-You: "Is there anything else?"
-Them: "No"
-You: "Are you sure? Any questions about our process? Okay, well if you think of anything..." [STOP REPEATING]
-
-Keep it professional, efficient, and warm. Acknowledge briefly: "Thank you", "Understood", "I have that".
-
-RULES:
-- Never give legal advice
-- Never discuss other clients
-- Never make outcome promises
+Common responses:
 - Fees: "Our attorney will discuss fees during your consultation"
 - "Do I have a case?": "That's what the consultation will determine"`,
 
-    firstMessage: (businessName) => `Thank you for calling ${businessName}. This call may be recorded. How may I assist you today?`,
+    firstMessage: (businessName) => `Hello, you've reached ${businessName}. How may I help you?`,
     
-    summaryPrompt: `You are analyzing a phone call recording where a CLIENT called the professional services firm.
+    summaryPrompt: `You are analyzing a phone call where a CLIENT called a professional services firm.
 
-Summarize this INCOMING call in 2-3 sentences:
-1. Client name, phone, company (if business), and whether they're new or existing
-2. General type of matter the CLIENT needs help with (no confidential details - just broad category)
-3. Urgency level (critical deadline vs. routine) and next action needed
+Summarize in 2-3 sentences:
+1. Client name, phone, company (if business), and whether new or existing
+2. General type of matter the CLIENT needs help with (no confidential details)
+3. Urgency level and next action
 
-Note if this is a referral and from whom. Keep it confidential and professional.
-
-Remember: The CLIENT called IN seeking professional services. Summarize what THEY need.`,
-
-    endCallPhrases: [
-      "thank you for calling",
-      "we look forward to speaking with you"
-    ],
+Note if referral and from whom. Keep it professional.`,
 
     structuredDataSchema: {
       type: 'object',
@@ -401,7 +302,7 @@ Remember: The CLIENT called IN seeking professional services. Summarize what THE
         },
         company_name: {
           type: 'string',
-          description: 'Company name if business client'
+          description: 'Company name if business'
         },
         client_type: {
           type: 'string',
@@ -410,7 +311,7 @@ Remember: The CLIENT called IN seeking professional services. Summarize what THE
         },
         matter_type: { 
           type: 'string',
-          description: 'General category (no confidential details)'
+          description: 'General category'
         },
         urgency: { 
           type: 'string',
@@ -431,65 +332,44 @@ Remember: The CLIENT called IN seeking professional services. Summarize what THE
     
     systemPrompt: (businessName) => `You are the phone assistant for ${businessName}, a restaurant.
 
-Your job: Take reservations, handle orders, answer menu questions, make people excited about their meal.
+Your job: Take reservations, handle takeout orders, answer menu questions, and make people excited.
 
 CONVERSATION FLOW:
-1. Ask: "Reservation, takeout, or menu question?"
-2. Handle their request:
+1. Ask: "Is this for a reservation or a takeout order?"
+2. Handle based on their response:
    
    RESERVATIONS:
-   - Get date, time, party size, name, phone (one at a time)
-   - Special occasion? Get excited! "We'd love to help celebrate!"
-   - Confirm: "[Party size] on [date] at [time] under [name]"
+   - Date: "What date would you like?" → "Perfect"
+   - Time: "What time works best?" → "Great"
+   - Party size: "How many people?" → "Got it"
+   - Name: "Name for the reservation?" → "Thank you"
+   - Phone: "Best number to reach you?" → Confirm all details
    
    TAKEOUT:
-   - List items as they order, quick "got it" between each
-   - Get name and phone
+   - Take order item by item, acknowledging each: "Got it", "Perfect"
+   - Name: "Name for the order?" → "Thanks"
+   - Phone: "Best number to reach you?"
    - Confirm: "[Items] for [name], ready in [time]"
    
    MENU QUESTIONS:
-   - Be enthusiastic, use knowledge base
+   - Answer enthusiastically using knowledge base
    - Make recommendations
 
-3. Ask: "Is there anything else I can help you with?" ONE TIME ONLY
-4. When they say no → Say: "Thank you for calling ${businessName}, we can't wait to see you!" → STOP
+3. Ask: "Is there anything else I can help you with?"
+4. When they say no: "Great! We can't wait to see you!"
 
-CRITICAL END-CALL RULES:
-- The phrases "thank you for calling" and "we can't wait to see you" END the call automatically
-- After you say these phrases, the call ENDS immediately
-- NEVER say these phrases until ready to end
-- NEVER repeat yourself after asking "anything else"
+Be warm, inviting, and enthusiastic. Sound like you're smiling. Make them hungry!`,
 
-CORRECT:
-You: "Anything else I can help with?"
-Them: "No, that's everything"
-You: "Thank you for calling ${businessName}, we can't wait to see you!"
-[Call ends]
-
-WRONG - Never do this:
-You: "Anything else?"
-Them: "No"
-You: "Want to hear our specials? Any dessert? Well we're here if..." [STOP REPEATING]
-
-Be warm, inviting, enthusiastic. Sound like you're smiling. Make them hungry!`,
-
-    firstMessage: (businessName) => `Thank you for calling ${businessName}! This call may be recorded. Reservation, takeout, or can I answer menu questions?`,
+    firstMessage: (businessName) => `Hi! You've reached ${businessName}. How can I help you?`,
     
-    summaryPrompt: `You are analyzing a phone call recording where a CUSTOMER called the restaurant.
+    summaryPrompt: `You are analyzing a phone call where a CUSTOMER called a restaurant.
 
-Summarize this INCOMING call in 2-3 sentences:
+Summarize in 2-3 sentences:
 1. Customer name and phone
-2. What the CUSTOMER needs (reservation, takeout, delivery, catering, or menu question)
-3. Key details: For reservations (party size, date, time, special occasion). For orders (items ordered, pickup time). For catering (event date, guest count).
+2. What the CUSTOMER needs (reservation, takeout, menu question)
+3. Key details: For reservations (party size, date, time). For orders (items, pickup time).
 
-Note any dietary restrictions or special requests.
-
-Remember: The CUSTOMER called IN to the restaurant. Summarize what THEY need.`,
-
-    endCallPhrases: [
-      "thank you for calling",
-      "we can't wait to see you"
-    ],
+Note dietary restrictions or special requests.`,
 
     structuredDataSchema: {
       type: 'object',
@@ -500,20 +380,20 @@ Remember: The CUSTOMER called IN to the restaurant. Summarize what THEY need.`,
         },
         customer_phone: { 
           type: 'string',
-          description: 'Contact phone number'
+          description: 'Contact phone'
         },
         call_purpose: { 
           type: 'string',
           enum: ['reservation', 'takeout', 'delivery', 'catering', 'menu_question', 'hours_location', 'complaint'],
-          description: 'Primary purpose'
+          description: 'Purpose of call'
         },
         party_size: {
           type: 'integer',
-          description: 'Number of guests for reservation'
+          description: 'Number of guests'
         },
         reservation_date: {
           type: 'string',
-          description: 'Date for reservation (YYYY-MM-DD)'
+          description: 'Date (YYYY-MM-DD)'
         },
         reservation_time: {
           type: 'string',
@@ -578,7 +458,7 @@ function getIndustryConfig(industryFromGHL, businessName, knowledgeBaseId = null
     
     model: {
       provider: 'openai',
-      model: 'gpt-4o-mini',  // ✅ Using gpt-4o-mini as requested
+      model: 'gpt-4o-mini',
       temperature: config.temperature,
       ...(knowledgeBaseId && { knowledgeBaseId: knowledgeBaseId }),
       messages: [{ 
@@ -596,13 +476,6 @@ function getIndustryConfig(industryFromGHL, businessName, knowledgeBaseId = null
     },
     
     firstMessage: config.firstMessage(businessName),
-    
-    // ✅ END CALL CONFIGURATION (TOP LEVEL)
-    endCallMessage: "Have a great day.",
-    endCallPhrases: config.endCallPhrases || [
-      "thank you for calling",
-      "we look forward to speaking with you"
-    ],
     
     recordingEnabled: true,
     
@@ -646,7 +519,6 @@ async function createIndustryAssistant(businessName, industry, knowledgeBaseId =
     console.log(`🤖 Model: ${config.model.model}`);
     console.log(`🎤 Voice: ElevenLabs - ${config.voice.voiceId}`);
     console.log(`🌡️ Temperature: ${config.model.temperature}`);
-    console.log(`📞 End Call Phrases: ${config.endCallPhrases.join(', ')}`);
     if (knowledgeBaseId) console.log(`📚 Knowledge Base: ${knowledgeBaseId}`);
     if (ownerPhone) console.log(`📞 Transfer enabled to: ${ownerPhone}`);
     
