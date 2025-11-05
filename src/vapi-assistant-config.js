@@ -1,8 +1,8 @@
 // ====================================================================
-// VAPI ASSISTANT CONFIGURATION - Industry-Specific Templates (V4.4)
+// VAPI ASSISTANT CONFIGURATION - Industry-Specific Templates (V4.3)
 // ====================================================================
-// MINIMAL FIX: Added explicit "never end calls" instructions
-// Removed any potential end-call trigger language
+// FIXED: Removed endCallPhrases, simplified prompts, using gpt-4o-mini
+// Natural call endings without automatic hangup features
 // ====================================================================
 
 const fetch = require('node-fetch');
@@ -52,6 +52,7 @@ CONVERSATION FLOW:
 4. Assess urgency silently (emergency/urgent/routine)
 5. Let them know next steps: "Our team will call you back [timeframe]" or "We'll get someone out to you ASAP"
 6. Ask: "Is there anything else I can help you with?"
+7. When they say no: "Perfect. We'll be in touch soon. Have a great day."
 
 Keep it natural and conversational. Use brief acknowledgments. Be warm and empathetic.
 
@@ -129,6 +130,7 @@ CONVERSATION FLOW:
    - Routine: "Let me get you scheduled"
 5. Let them know next steps
 6. Ask: "Is there anything else I can help you with today?"
+7. When they say no: "Perfect. We look forward to seeing you. Take care."
 
 Be professional, warm, and calming. People calling doctors are often stressed.
 
@@ -200,6 +202,7 @@ CONVERSATION FLOW:
 3. Get contact info when needed (name and phone)
 4. Confirm orders or details
 5. Ask: "Is there anything else I can help you find?"
+6. When they say no: "Awesome! Thanks for calling, we hope to see you soon!"
 
 Be upbeat, enthusiastic, and helpful. Make them excited about your products.
 
@@ -271,10 +274,15 @@ CONVERSATION FLOW:
    - Routine: "Our team will call you back today"
 4. Confirm: "I have [name] from [company] at [phone] regarding [matter type]. Our team will [action] [timeframe]."
 5. Ask: "Is there anything else I can help you with today?"
+6. When they say no: "Great. Someone from our team will be in touch. Have a good day."
 
 Keep it professional, confident, and efficient. Brief acknowledgments.
 
 NEVER give legal advice. NEVER discuss other clients. NEVER make outcome promises.
+
+Common responses:
+- Fees: "Our attorney will discuss fees during your consultation"
+- "Do I have a case?": "That's what the consultation will determine"
 
 CRITICAL: You do NOT have the ability to end calls. The client will hang up when they're ready. Keep the conversation going naturally until they decide to end it.`,
 
@@ -356,6 +364,7 @@ CONVERSATION FLOW:
    - Make recommendations
 
 3. Ask: "Is there anything else I can help you with?"
+4. When they say no: "Great! We can't wait to see you!"
 
 Be warm, inviting, and enthusiastic. Sound like you're smiling. Make them hungry!
 
