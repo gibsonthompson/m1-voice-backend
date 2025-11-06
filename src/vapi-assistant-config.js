@@ -640,16 +640,8 @@ function getIndustryConfig(industryFromGHL, businessName, queryToolId = null, ow
     return getIndustryConfig('Professional Services (legal, accounting)', businessName, queryToolId, ownerPhone);
   }
 
-  // Build tools array
+  // Build tools array (only for non-function tools like transferCall)
   const tools = [];
-  
-  // Add Query Tool if available
-  if (queryToolId) {
-    tools.push({
-      type: 'function',
-      id: queryToolId
-    });
-  }
   
   // Add Transfer Tool if owner phone provided
   if (ownerPhone) {
@@ -687,6 +679,7 @@ function getIndustryConfig(industryFromGHL, businessName, queryToolId = null, ow
         role: 'system', 
         content: config.systemPrompt(businessName)
       }],
+      ...(queryToolId && { toolIds: [queryToolId] }),
       ...(tools.length > 0 && { tools })
     },
     
