@@ -1,11 +1,10 @@
 // ====================================================================
-// VAPI ASSISTANT CONFIGURATION - Industry-Specific Templates (V4.5)
+// VAPI ASSISTANT CONFIGURATION - Industry-Specific Templates (V4.6)
 // ====================================================================
 // FIXES:
-// 1. Added "This call may be recorded" disclosure (LEGAL REQUIREMENT)
-// 2. Added "cannot end calls" instruction (fixes premature hangup)
-// 3. Improved prompts based on VAPI best practices (better structure, error handling)
-// 4. Added KNOWLEDGE BASE USAGE instructions to all industry prompts
+// 1. Changed home_services voice to Adam (better quality)
+// 2. Fixed extraction prompt to ignore conversational words like "sorry"
+// 3. Added Query Tool creation for knowledge base (NEW VAPI REQUIREMENT)
 // ====================================================================
 
 const fetch = require('node-fetch');
@@ -23,7 +22,7 @@ const INDUSTRY_MAPPING = {
 const VOICES = {
   male_professional: '29vD33N1CtxCmqQRPOHJ',
   female_warm: '21m00Tcm4TlvDq8ikWAM',
-  male_friendly: '2EiwWnXFnvU5JabPnv8n',
+  male_adam: 'pNInz6obpgDQGcFmaJgB', // ✅ CHANGED: Better voice quality
   female_soft: 'EXAVITQu4vr4xnSDxMaL'
 };
 
@@ -37,7 +36,7 @@ const INDUSTRY_CONFIGS = {
   // 1. HOME SERVICES
   // ================================================================
   home_services: {
-    voiceId: VOICES.male_friendly,
+    voiceId: VOICES.male_adam, // ✅ CHANGED: Better voice quality
     temperature: 0.4,
     
     systemPrompt: (businessName) => `You are the phone assistant for ${businessName}, a home services company.
@@ -64,9 +63,9 @@ Listen to customers' problems, collect their information, and let them know when
 - Sound like a helpful human, not a script-reader
 
 ## KNOWLEDGE BASE USAGE
-The knowledge base contains information about our business hours, services, pricing, service areas, and policies.
+When customers ask about services, pricing, hours, or policies, use the 'search_knowledge_base' tool to find accurate information.
 
-**ALWAYS reference the knowledge base when asked about:**
+**ALWAYS search the knowledge base for:**
 - Business hours or availability
 - Service offerings and what we do
 - Pricing or cost estimates
@@ -174,9 +173,9 @@ Determine patient needs, collect basic HIPAA-compliant information, and route ap
 - If they share medical info: redirect to "the doctor will discuss that"
 
 ## KNOWLEDGE BASE USAGE
-The knowledge base contains information about our business hours, services, insurance accepted, office policies, and general practice information.
+When patients ask about office hours, insurance, services, or policies, use the 'search_knowledge_base' tool to find accurate information.
 
-**ALWAYS reference the knowledge base when asked about:**
+**ALWAYS search the knowledge base for:**
 - Office hours or availability
 - Services offered and specialties
 - Insurance providers accepted
@@ -273,9 +272,9 @@ Answer questions, help find products, take orders, and be enthusiastic. Make cus
 - Make them want to visit or order
 
 ## KNOWLEDGE BASE USAGE
-The knowledge base contains information about our products, store hours, locations, policies, and current promotions.
+When customers ask about products, hours, pricing, or store info, use the 'search_knowledge_base' tool.
 
-**ALWAYS reference the knowledge base when asked about:**
+**ALWAYS search the knowledge base for:**
 - Store hours or location
 - Product availability and specifications
 - Pricing and current promotions
@@ -379,9 +378,9 @@ Greet callers professionally, understand their needs, collect contact informatio
 - If asked "Do I have a case?": "That's what the consultation will determine"
 
 ## KNOWLEDGE BASE USAGE
-The knowledge base contains information about our firm, practice areas, office hours, consultation procedures, and general policies.
+When asked about the firm, services, or procedures, use the 'search_knowledge_base' tool.
 
-**ALWAYS reference the knowledge base when asked about:**
+**ALWAYS search the knowledge base for:**
 - Office hours and location
 - Practice areas and services offered
 - Initial consultation process
@@ -490,9 +489,9 @@ Take reservations, handle takeout orders, answer menu questions, and make people
 - Natural and friendly, not scripted
 
 ## KNOWLEDGE BASE USAGE
-The knowledge base contains information about our menu, hours, location, reservations policy, dietary accommodations, and special offerings.
+When asked about the menu, hours, reservations, or restaurant info, use the 'search_knowledge_base' tool.
 
-**ALWAYS reference the knowledge base when asked about:**
+**ALWAYS search the knowledge base for:**
 - Menu items, ingredients, and preparation methods
 - Hours of operation and days closed
 - Reservation policies and availability
@@ -575,39 +574,107 @@ Note dietary restrictions or special requests.`,
 };
 
 // ====================================================================
+// CREATE QUERY TOOL (NEW VAPI REQUIREMENT)
+// ====================================================================
+
+async function createQueryTool(knowledgeBaseId, businessName, vapiApiKey) {
+  try {
+    console.log('🔧 Creating Query Tool for knowledge base...');
+    
+    const toolResponse = await fetch('https://api.vapi.ai/tool', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${vapiApiKey}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        type: 'function',
+        async: false,
+        messages: [],
+        function: {
+          name: 'search_knowledge_base',
+          description: `Search ${businessName}'s knowledge base for information about services, pricing, hours, policies, and company information.`,
+          parameters: {
+            type: 'object',
+            properties: {
+              query: {
+                type: 'string',
+                description: 'The search query to find relevant information'
+              }
+            },
+            required: ['query']
+          }
+        },
+        server: {
+          url: `https://api.vapi.ai/knowledge-base/${knowledgeBaseId}/query`
+        }
+      })
+    });
+
+    if (!toolResponse.ok) {
+      const errorText = await toolResponse.text();
+      console.error('⚠️ Query tool creation failed:', errorText);
+      return null;
+    }
+
+    const toolData = await toolResponse.json();
+    console.log(`✅ Query Tool created: ${toolData.id}`);
+    return toolData.id;
+    
+  } catch (error) {
+    console.error('❌ Query tool creation error:', error);
+    return null;
+  }
+}
+
+// ====================================================================
 // CONFIGURATION BUILDER
 // ====================================================================
 
-function getIndustryConfig(industryFromGHL, businessName, knowledgeBaseId = null, ownerPhone = null) {
+function getIndustryConfig(industryFromGHL, businessName, queryToolId = null, ownerPhone = null) {
   const industryKey = INDUSTRY_MAPPING[industryFromGHL] || 'professional_services';
   const config = INDUSTRY_CONFIGS[industryKey];
   
   if (!config) {
     console.error(`⚠️ Unknown industry: ${industryFromGHL}, using professional_services`);
-    return getIndustryConfig('Professional Services (legal, accounting)', businessName, knowledgeBaseId, ownerPhone);
+    return getIndustryConfig('Professional Services (legal, accounting)', businessName, queryToolId, ownerPhone);
   }
 
-  const transferTool = ownerPhone ? {
-    type: 'transferCall',
-    destinations: [
-      {
-        type: 'number',
-        number: ownerPhone,
-        description: 'Transfer to business owner for urgent matters, complex issues, or manager requests',
-        message: 'One moment please, let me connect you with the owner.'
-      }
-    ],
-    messages: [
-      {
-        type: 'request-start',
-        content: 'Let me transfer you now.'
-      },
-      {
-        type: 'request-complete',
-        content: 'Transferring your call.'
-      }
-    ]
-  } : null;
+  // Build tools array
+  const tools = [];
+  
+  // Add Query Tool if available
+  if (queryToolId) {
+    tools.push({
+      type: 'function',
+      id: queryToolId
+    });
+  }
+  
+  // Add Transfer Tool if owner phone provided
+  if (ownerPhone) {
+    tools.push({
+      type: 'transferCall',
+      destinations: [
+        {
+          type: 'number',
+          number: ownerPhone,
+          description: 'Transfer to business owner for urgent matters, complex issues, or manager requests',
+          message: 'One moment please, let me connect you with the owner.'
+        }
+      ],
+      messages: [
+        {
+          type: 'request-start',
+          content: 'Let me transfer you now.'
+        },
+        {
+          type: 'request-complete',
+          content: 'Transferring your call.'
+        }
+      ]
+    });
+  }
 
   return {
     name: `${businessName} AI Receptionist`,
@@ -616,14 +683,11 @@ function getIndustryConfig(industryFromGHL, businessName, knowledgeBaseId = null
       provider: 'openai',
       model: 'gpt-4o-mini',
       temperature: config.temperature,
-      ...(knowledgeBaseId && { knowledgeBaseId: knowledgeBaseId }),
       messages: [{ 
         role: 'system', 
         content: config.systemPrompt(businessName)
       }],
-      ...(transferTool && {
-        tools: [transferTool]
-      })
+      ...(tools.length > 0 && { tools })
     },
     
     voice: {
@@ -653,7 +717,19 @@ function getIndustryConfig(industryFromGHL, businessName, knowledgeBaseId = null
         schema: config.structuredDataSchema,
         messages: [{
           role: 'system',
-          content: 'Extract the structured data from this call accurately and completely. Ensure all required fields are captured.'
+          content: `You are extracting customer information from a phone call transcript.
+
+CRITICAL EXTRACTION RULES:
+- Extract ONLY actual customer data, NOT conversational words
+- Customer name: Extract the actual name stated (e.g., "John Smith"), NEVER words like "sorry", "thanks", "um", "well", "yeah", "ok"
+- Phone number: Extract digits only in the format stated
+- If customer says "My name is John Smith" → extract "John Smith"
+- If customer says "Sorry, it's John" → extract "John", NOT "sorry"
+- If customer says "Thanks, I'm Sarah" → extract "Sarah", NOT "thanks"
+
+IGNORE these conversational fillers completely: sorry, thanks, thank you, um, uh, well, actually, yeah, ok, sure, please
+
+Extract structured data accurately. If a field is not mentioned, leave it empty or null.`
         }]
       }
     }
@@ -668,7 +744,18 @@ async function createIndustryAssistant(businessName, industry, knowledgeBaseId =
   try {
     console.log(`🎯 Creating ${industry} assistant for ${businessName}`);
     
-    const config = getIndustryConfig(industry, businessName, knowledgeBaseId, ownerPhone);
+    // Create Query Tool if knowledge base exists
+    let queryToolId = null;
+    if (knowledgeBaseId) {
+      queryToolId = await createQueryTool(knowledgeBaseId, businessName, process.env.VAPI_API_KEY);
+      if (queryToolId) {
+        console.log(`✅ Query Tool ready: ${queryToolId}`);
+      } else {
+        console.log('⚠️ Query Tool creation failed, continuing without KB access');
+      }
+    }
+    
+    const config = getIndustryConfig(industry, businessName, queryToolId, ownerPhone);
     config.serverUrl = serverUrl || process.env.BACKEND_URL + '/webhook/vapi';
     
     console.log(`📝 Industry: ${INDUSTRY_MAPPING[industry] || 'default'}`);
@@ -676,6 +763,7 @@ async function createIndustryAssistant(businessName, industry, knowledgeBaseId =
     console.log(`🎤 Voice: ElevenLabs - ${config.voice.voiceId}`);
     console.log(`🌡️ Temperature: ${config.model.temperature}`);
     if (knowledgeBaseId) console.log(`📚 Knowledge Base: ${knowledgeBaseId}`);
+    if (queryToolId) console.log(`🔧 Query Tool: ${queryToolId}`);
     if (ownerPhone) console.log(`📞 Transfer enabled to: ${ownerPhone}`);
     
     const response = await fetch('https://api.vapi.ai/assistant', {
@@ -763,6 +851,7 @@ async function enableVAPIAssistant(assistantId, serverUrl) {
 module.exports = {
   getIndustryConfig,
   createIndustryAssistant,
+  createQueryTool,
   disableVAPIAssistant,
   enableVAPIAssistant,
   INDUSTRY_MAPPING
