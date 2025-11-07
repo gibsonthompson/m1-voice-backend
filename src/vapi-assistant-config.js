@@ -1,9 +1,9 @@
 // ====================================================================
-// VAPI ASSISTANT CONFIGURATION - Industry-Specific Templates (V4.7)
+// VAPI ASSISTANT CONFIGURATION - Industry-Specific Templates (V4.8)
 // ====================================================================
 // FIXES:
 // 1. Changed home_services voice to Adam (better quality)
-// 2. Fixed extraction prompt to ignore conversational words
+// 2. REVERTED extraction prompt to simple working version
 // 3. FIXED Query Tool to use correct VAPI structure with fileIds
 // ====================================================================
 
@@ -713,19 +713,7 @@ function getIndustryConfig(industryFromGHL, businessName, queryToolId = null, ow
         schema: config.structuredDataSchema,
         messages: [{
           role: 'system',
-          content: `You are extracting customer information from a phone call transcript.
-
-CRITICAL EXTRACTION RULES:
-- Extract ONLY actual customer data, NOT conversational words
-- Customer name: Extract the actual name stated (e.g., "John Smith"), NEVER words like "sorry", "thanks", "um", "well", "yeah", "ok"
-- Phone number: Extract digits only in the format stated
-- If customer says "My name is John Smith" → extract "John Smith"
-- If customer says "Sorry, it's John" → extract "John", NOT "sorry"
-- If customer says "Thanks, I'm Sarah" → extract "Sarah", NOT "thanks"
-
-IGNORE these conversational fillers completely: sorry, thanks, thank you, um, uh, well, actually, yeah, ok, sure, please
-
-Extract structured data accurately. If a field is not mentioned, leave it empty or null.`
+          content: 'Extract structured data accurately. If a field is not mentioned, leave it empty or null.'
         }]
       }
     }
