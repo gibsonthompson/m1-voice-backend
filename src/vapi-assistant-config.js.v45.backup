@@ -1,10 +1,10 @@
 // ====================================================================
-// VAPI ASSISTANT CONFIGURATION - Industry-Specific Templates (V4.7)
+// VAPI ASSISTANT CONFIGURATION - Industry-Specific Templates (V4.6)
 // ====================================================================
 // FIXES:
 // 1. Changed home_services voice to Adam (better quality)
-// 2. Fixed extraction prompt to ignore conversational words
-// 3. FIXED Query Tool to use correct VAPI structure with fileIds
+// 2. Fixed extraction prompt to ignore conversational words like "sorry"
+// 3. Added Query Tool creation for knowledge base (NEW VAPI REQUIREMENT)
 // ====================================================================
 
 const fetch = require('node-fetch');
@@ -574,10 +574,10 @@ Note dietary restrictions or special requests.`,
 };
 
 // ====================================================================
-// CREATE QUERY TOOL (✅ FIXED WITH CORRECT VAPI STRUCTURE)
+// CREATE QUERY TOOL (NEW VAPI REQUIREMENT)
 // ====================================================================
 
-async function createQueryTool(fileId, businessName, vapiApiKey) {
+async function createQueryTool(knowledgeBaseId, businessName, vapiApiKey) {
   try {
     console.log('🔧 Creating Query Tool for knowledge base...');
     
@@ -588,8 +588,9 @@ async function createQueryTool(fileId, businessName, vapiApiKey) {
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        type: 'query',  // ✅ CORRECT: Use "query" not "function"
+        type: 'function',
         async: false,
+        messages: [],
         function: {
           name: 'search_knowledge_base',
           description: `Search ${businessName}'s knowledge base for information about services, pricing, hours, policies, and company information.`,
@@ -604,13 +605,9 @@ async function createQueryTool(fileId, businessName, vapiApiKey) {
             required: ['query']
           }
         },
-        knowledgeBases: [{  // ✅ CORRECT: Use knowledgeBases array with fileIds
-          name: `${businessName} Knowledge Base`,
-          model: 'gemini-1.5-flash',
-          provider: 'google',
-          description: `Contains information about ${businessName}'s services, pricing, hours, policies, and company details`,
-          fileIds: [fileId]  // ✅ CORRECT: Use fileId from file upload
-        }]
+        server: {
+          url: `https://api.vapi.ai/knowledge-base/${knowledgeBaseId}/query`
+        }
       })
     });
 
@@ -643,8 +640,16 @@ function getIndustryConfig(industryFromGHL, businessName, queryToolId = null, ow
     return getIndustryConfig('Professional Services (legal, accounting)', businessName, queryToolId, ownerPhone);
   }
 
-  // Build tools array (only for non-function tools like transferCall)
+  // Build tools array
   const tools = [];
+  
+  // Add Query Tool if available
+  if (queryToolId) {
+    tools.push({
+      type: 'function',
+      id: queryToolId
+    });
+  }
   
   // Add Transfer Tool if owner phone provided
   if (ownerPhone) {
@@ -682,8 +687,7 @@ function getIndustryConfig(industryFromGHL, businessName, queryToolId = null, ow
         role: 'system', 
         content: config.systemPrompt(businessName)
       }],
-      ...(queryToolId && { toolIds: [queryToolId] }),  // ✅ CORRECT: Use toolIds for function tools
-      ...(tools.length > 0 && { tools })  // Other tools like transferCall
+      ...(tools.length > 0 && { tools })
     },
     
     voice: {
@@ -736,14 +740,14 @@ Extract structured data accurately. If a field is not mentioned, leave it empty 
 // VAPI ASSISTANT MANAGEMENT
 // ====================================================================
 
-async function createIndustryAssistant(businessName, industry, knowledgeBaseData = null, ownerPhone = null, serverUrl = null) {
+async function createIndustryAssistant(businessName, industry, knowledgeBaseId = null, ownerPhone = null, serverUrl = null) {
   try {
     console.log(`🎯 Creating ${industry} assistant for ${businessName}`);
     
     // Create Query Tool if knowledge base exists
     let queryToolId = null;
-    if (knowledgeBaseData && knowledgeBaseData.fileId) {
-      queryToolId = await createQueryTool(knowledgeBaseData.fileId, businessName, process.env.VAPI_API_KEY);
+    if (knowledgeBaseId) {
+      queryToolId = await createQueryTool(knowledgeBaseId, businessName, process.env.VAPI_API_KEY);
       if (queryToolId) {
         console.log(`✅ Query Tool ready: ${queryToolId}`);
       } else {
@@ -758,7 +762,7 @@ async function createIndustryAssistant(businessName, industry, knowledgeBaseData
     console.log(`🤖 Model: ${config.model.model}`);
     console.log(`🎤 Voice: ElevenLabs - ${config.voice.voiceId}`);
     console.log(`🌡️ Temperature: ${config.model.temperature}`);
-    if (knowledgeBaseData) console.log(`📚 Knowledge Base: ${knowledgeBaseData.knowledgeBaseId}`);
+    if (knowledgeBaseId) console.log(`📚 Knowledge Base: ${knowledgeBaseId}`);
     if (queryToolId) console.log(`🔧 Query Tool: ${queryToolId}`);
     if (ownerPhone) console.log(`📞 Transfer enabled to: ${ownerPhone}`);
     
