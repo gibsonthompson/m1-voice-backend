@@ -715,6 +715,16 @@ function getIndustryConfig(industryFromGHL, businessName, queryToolId = null, ow
           role: 'system',
           content: 'Extract structured data accurately. If a field is not mentioned, leave it empty or null.'
         }]
+      },
+      
+      successEvaluationPlan: {
+        enabled: true,
+        rubric: 'PassFail',
+        timeoutSeconds: 30,
+        messages: [{
+          role: 'system',
+          content: 'Evaluate if this call was successful. A call is successful if the AI assistant collected the required customer information (name, phone number) and addressed the customer\'s inquiry appropriately. Return true if successful, false otherwise.'
+        }]
       }
     }
   };
