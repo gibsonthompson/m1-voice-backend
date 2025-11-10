@@ -140,6 +140,28 @@ function formatPhoneE164(phone) {
   return null;
 }
 
+// ✅ NEW: Format phone to display format: (678) 316-1454
+function formatPhoneDisplay(phone) {
+  if (!phone) return null;
+  
+  // Remove all non-digits
+  const cleaned = phone.replace(/\D/g, '');
+  
+  // Handle 10 digits (US number without country code)
+  if (cleaned.length === 10) {
+    return `(${cleaned.substring(0,3)}) ${cleaned.substring(3,6)}-${cleaned.substring(6)}`;
+  }
+  
+  // Handle 11 digits (US number with country code 1)
+  if (cleaned.length === 11 && cleaned.startsWith('1')) {
+    const without1 = cleaned.substring(1);
+    return `(${without1.substring(0,3)}) ${without1.substring(3,6)}-${without1.substring(6)}`;
+  }
+  
+  // Return as-is if format doesn't match
+  return phone;
+}
+
 // Get VAPI phone number from phoneNumberId
 async function getPhoneNumberFromVapi(phoneNumberId) {
   try {
@@ -333,11 +355,7 @@ function extractPhoneNumber(transcript) {
   const phonePattern = /(\+?1?\s*\(?[2-9]\d{2}\)?[\s.-]?\d{3}[\s.-]?\d{4})/;
   const match = transcript.match(phonePattern);
   if (match) {
-    const cleaned = match[1].replace(/\D/g, '');
-    if (cleaned.length === 10) {
-      return `(${cleaned.substring(0,3)}) ${cleaned.substring(3,6)}-${cleaned.substring(6)}`;
-    }
-    return cleaned;
+    return formatPhoneDisplay(match[1]);
   }
   return null;
 }
@@ -433,7 +451,7 @@ async function handleVapiWebhook(req, res) {
       console.log(`✅ Within limit, processing call...`);
       
       // ============================================
-      // 🆕 EXTRACT DATA FROM VAPI ANALYSIS (FIXED)
+      // ✅ EXTRACT DATA FROM VAPI ANALYSIS (FIXED)
       // ============================================
       const transcript = message.transcript || '';
       const callerPhone = call.customer?.number || 'Unknown';
@@ -444,39 +462,54 @@ async function handleVapiWebhook(req, res) {
       // Use VAPI's analysis if available
       const analysis = message.analysis || {};
       
-      // ✅ FIX: Use snake_case field names (customer_name, not customerName)
+      // ✅ Extract data from VAPI's structuredData, with formatted phone
       const customerName = analysis.structuredData?.customer_name || 
                           extractCustomerName(transcript);
-      const customerPhone = analysis.structuredData?.customer_phone || 
-                           extractPhoneNumber(transcript) || 
-                           callerPhone;
+      
+      // ✅ FIX: Format phone from VAPI using formatPhoneDisplay
+      const rawCustomerPhone = analysis.structuredData?.customer_phone || 
+                              extractPhoneNumber(transcript) || 
+                              callerPhone;
+      const customerPhone = formatPhoneDisplay(rawCustomerPhone);
+      
       const customerEmail = analysis.structuredData?.customer_email || 
                            extractEmail(transcript);
       const urgency = analysis.structuredData?.urgency || 
                      detectUrgency(transcript);
       const serviceType = analysis.structuredData?.service_type || null;
       
-      // ✅ FIX: Use VAPI's summary directly (don't build our own)
+      // ✅ FIX: Use VAPI's summary directly, with improved fallback
       let aiSummary = analysis.summary || '';
       
-      // Fallback: If VAPI didn't generate summary or it's generic, build basic one
-      if (!aiSummary || aiSummary.toLowerCase().includes('unknown')) {
-        console.log('⚠️ VAPI summary missing or generic, building fallback summary');
+      console.log('📝 VAPI Summary received:', aiSummary || '(empty)');
+      
+      // Improved fallback: Build better summary if VAPI's is missing/generic
+      if (!aiSummary || aiSummary.trim().length < 10) {
+        console.log('⚠️ VAPI summary empty/short, building fallback summary');
+        
+        // Build descriptive summary
+        let parts = [];
+        
         if (customerName && customerName !== 'Unknown') {
-          aiSummary = `${customerName} called`;
+          parts.push(`${customerName} called`);
         } else {
-          aiSummary = 'Customer called';
+          parts.push('Customer called');
         }
+        
         if (serviceType) {
-          aiSummary += ` about ${serviceType}`;
+          parts.push(`regarding ${serviceType}`);
         }
+        
         if (urgency === 'high' || urgency === 'emergency') {
-          aiSummary += ' (URGENT)';
+          parts.push('(URGENT)');
         }
+        
+        aiSummary = parts.join(' ') + '.';
+        
+        // Add contact info in a separate line for clarity
         if (customerPhone && customerPhone !== 'Unknown') {
-          aiSummary += `. Contact: ${customerPhone}`;
+          aiSummary += ` Contact: ${customerPhone}`;
         }
-        aiSummary = aiSummary.trim() + '.';
       }
       
       console.log('📊 Extracted data:');
@@ -485,7 +518,7 @@ async function handleVapiWebhook(req, res) {
       console.log('   Customer Email:', customerEmail);
       console.log('   Service Type:', serviceType);
       console.log('   Urgency:', urgency);
-      console.log('   Summary:', aiSummary);
+      console.log('   Final Summary:', aiSummary);
 
       // ============================================
       // EXTRACT RECORDING URL FROM VAPI
