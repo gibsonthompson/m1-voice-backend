@@ -140,7 +140,7 @@ function formatPhoneE164(phone) {
   return null;
 }
 
-// ✅ NEW: Format phone to display format: (678) 316-1454
+// ✅ Format phone to display format: (678) 316-1454
 function formatPhoneDisplay(phone) {
   if (!phone) return null;
   
@@ -383,6 +383,95 @@ function detectUrgency(transcript) {
 }
 
 // ============================================
+// ✅ CUSTOM SUMMARY GENERATOR (REPLACES VAPI)
+// ============================================
+function generateSmartSummary(transcript, customerName, customerPhone, customerEmail, urgency, industry) {
+  console.log('🤖 Generating custom summary (VAPI analysis disabled due to bug)');
+  
+  // Extract key details from transcript
+  const lowerTranscript = transcript.toLowerCase();
+  
+  // Detect common phrases/keywords
+  const issueKeywords = {
+    home_services: ['leak', 'broken', 'repair', 'install', 'fix', 'replace', 'water', 'heater', 'plumbing', 'hvac', 'electrical', 'drain', 'pipe', 'toilet', 'sink', 'ac', 'furnace'],
+    medical: ['appointment', 'checkup', 'pain', 'sick', 'doctor', 'dentist', 'cleaning', 'exam', 'insurance', 'new patient'],
+    retail: ['product', 'order', 'buy', 'purchase', 'stock', 'price', 'available', 'return', 'exchange'],
+    professional_services: ['consultation', 'legal', 'tax', 'business', 'contract', 'lawsuit', 'advice', 'accounting'],
+    restaurants: ['reservation', 'table', 'party', 'takeout', 'delivery', 'menu', 'order', 'tonight', 'tomorrow']
+  };
+  
+  // Find mentioned keywords
+  const relevantKeywords = issueKeywords[industry] || [];
+  const mentionedIssues = relevantKeywords.filter(keyword => lowerTranscript.includes(keyword));
+  
+  // Detect timing/scheduling
+  const hasToday = lowerTranscript.includes('today');
+  const hasTomorrow = lowerTranscript.includes('tomorrow');
+  const hasThisWeek = lowerTranscript.includes('this week');
+  const hasNextWeek = lowerTranscript.includes('next week');
+  
+  // Build summary based on industry
+  let summary = '';
+  
+  // Sentence 1: Who called and their contact info
+  if (customerName && customerName !== 'Unknown') {
+    summary += `${customerName}`;
+    if (customerPhone && customerPhone !== 'Unknown') {
+      summary += ` (${customerPhone})`;
+    }
+    summary += ' called';
+  } else {
+    summary += 'Customer called';
+    if (customerPhone && customerPhone !== 'Unknown') {
+      summary += ` (${customerPhone})`;
+    }
+  }
+  
+  // Sentence 2: What they need (industry-specific)
+  if (mentionedIssues.length > 0) {
+    const topIssues = mentionedIssues.slice(0, 3).join(', ');
+    summary += ` regarding ${topIssues}`;
+  } else {
+    // Generic fallback based on industry
+    const genericReasons = {
+      home_services: 'a service request',
+      medical: 'an appointment',
+      retail: 'product information',
+      professional_services: 'professional services',
+      restaurants: 'a reservation or order'
+    };
+    summary += ` regarding ${genericReasons[industry] || 'assistance'}`;
+  }
+  summary += '.';
+  
+  // Sentence 3: Urgency and timing
+  if (urgency === 'high' || urgency === 'emergency') {
+    summary += ' URGENT request.';
+  } else if (hasToday) {
+    summary += ' Needs service today.';
+  } else if (hasTomorrow) {
+    summary += ' Requesting service for tomorrow.';
+  } else if (hasThisWeek) {
+    summary += ' Looking for service this week.';
+  } else if (hasNextWeek) {
+    summary += ' Interested in next week.';
+  } else {
+    summary += ' Flexible on timing.';
+  }
+  
+  // Add email if provided
+  if (customerEmail) {
+    summary += ` Email: ${customerEmail}.`;
+  }
+  
+  // Add next action
+  summary += ' Team should follow up promptly.';
+  
+  console.log('✅ Custom summary generated:', summary);
+  return summary;
+}
+
+// ============================================
 // MAIN WEBHOOK HANDLER
 // ============================================
 async function handleVapiWebhook(req, res) {
@@ -451,74 +540,37 @@ async function handleVapiWebhook(req, res) {
       console.log(`✅ Within limit, processing call...`);
       
       // ============================================
-      // ✅ EXTRACT DATA FROM VAPI ANALYSIS (FIXED)
+      // ✅ EXTRACT DATA & GENERATE CUSTOM SUMMARY
       // ============================================
       const transcript = message.transcript || '';
       const callerPhone = call.customer?.number || 'Unknown';
       
-      // 🔍 LOG RAW ANALYSIS DATA FOR DEBUGGING
-      console.log('🔍 RAW ANALYSIS DATA:', JSON.stringify(message.analysis, null, 2));
+      console.log('📝 Transcript length:', transcript.length, 'chars');
       
-      // Use VAPI's analysis if available
-      const analysis = message.analysis || {};
-      
-      // ✅ Extract data from VAPI's structuredData, with formatted phone
-      const customerName = analysis.structuredData?.customer_name || 
-                          extractCustomerName(transcript);
-      
-      // ✅ FIX: Format phone from VAPI using formatPhoneDisplay
-      const rawCustomerPhone = analysis.structuredData?.customer_phone || 
-                              extractPhoneNumber(transcript) || 
-                              callerPhone;
+      // Extract basic data from transcript
+      const customerName = extractCustomerName(transcript);
+      const rawCustomerPhone = extractPhoneNumber(transcript) || callerPhone;
       const customerPhone = formatPhoneDisplay(rawCustomerPhone);
+      const customerEmail = extractEmail(transcript);
+      const urgency = detectUrgency(transcript);
       
-      const customerEmail = analysis.structuredData?.customer_email || 
-                           extractEmail(transcript);
-      const urgency = analysis.structuredData?.urgency || 
-                     detectUrgency(transcript);
-      const serviceType = analysis.structuredData?.service_type || null;
-      
-      // ✅ FIX: Use VAPI's summary directly, with improved fallback
-      let aiSummary = analysis.summary || '';
-      
-      console.log('📝 VAPI Summary received:', aiSummary || '(empty)');
-      
-      // Improved fallback: Build better summary if VAPI's is missing/generic
-      if (!aiSummary || aiSummary.trim().length < 10) {
-        console.log('⚠️ VAPI summary empty/short, building fallback summary');
-        
-        // Build descriptive summary
-        let parts = [];
-        
-        if (customerName && customerName !== 'Unknown') {
-          parts.push(`${customerName} called`);
-        } else {
-          parts.push('Customer called');
-        }
-        
-        if (serviceType) {
-          parts.push(`regarding ${serviceType}`);
-        }
-        
-        if (urgency === 'high' || urgency === 'emergency') {
-          parts.push('(URGENT)');
-        }
-        
-        aiSummary = parts.join(' ') + '.';
-        
-        // Add contact info in a separate line for clarity
-        if (customerPhone && customerPhone !== 'Unknown') {
-          aiSummary += ` Contact: ${customerPhone}`;
-        }
-      }
+      // ✅ GENERATE CUSTOM SUMMARY (replaces broken VAPI analysis)
+      const aiSummary = generateSmartSummary(
+        transcript,
+        customerName,
+        customerPhone,
+        customerEmail,
+        urgency,
+        client.industry
+      );
       
       console.log('📊 Extracted data:');
       console.log('   Customer Name:', customerName);
       console.log('   Customer Phone:', customerPhone);
       console.log('   Customer Email:', customerEmail);
-      console.log('   Service Type:', serviceType);
       console.log('   Urgency:', urgency);
-      console.log('   Final Summary:', aiSummary);
+      console.log('   Industry:', client.industry);
+      console.log('   ✅ Generated Summary:', aiSummary);
 
       // ============================================
       // EXTRACT RECORDING URL FROM VAPI
@@ -660,7 +712,6 @@ async function handleVapiWebhook(req, res) {
           customerPhone,
           customerEmail,
           urgency,
-          serviceType,
           summary: aiSummary
         }
       });

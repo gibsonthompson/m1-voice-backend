@@ -1,12 +1,13 @@
 // ====================================================================
-// VAPI ASSISTANT CONFIGURATION - Industry-Specific Templates (V4.8)
+// VAPI ASSISTANT CONFIGURATION - Industry-Specific Templates (V4.9)
 // ====================================================================
 // FIXES:
 // 1. Changed home_services voice to Adam (better quality)
 // 2. REVERTED extraction prompt to simple working version
 // 3. FIXED Query Tool to use correct VAPI structure with fileIds
+// 4. ❌ REMOVED analysisPlan - VAPI bug causing empty messages array
+//    Summary generation now handled in webhook
 // ====================================================================
-
 const fetch = require('node-fetch');
 
 // Map GHL form values to internal industry keys
@@ -22,23 +23,20 @@ const INDUSTRY_MAPPING = {
 const VOICES = {
   male_professional: '29vD33N1CtxCmqQRPOHJ',
   female_warm: '21m00Tcm4TlvDq8ikWAM',
-  male_adam: 'pNInz6obpgDQGcFmaJgB', // ✅ CHANGED: Better voice quality
+  male_adam: 'pNInz6obpgDQGcFmaJgB',
   female_soft: 'EXAVITQu4vr4xnSDxMaL'
 };
 
 // ====================================================================
 // INDUSTRY CONFIGURATIONS
 // ====================================================================
-
 const INDUSTRY_CONFIGS = {
-  
   // ================================================================
   // 1. HOME SERVICES
   // ================================================================
   home_services: {
-    voiceId: VOICES.male_adam, // ✅ CHANGED: Better voice quality
+    voiceId: VOICES.male_adam,
     temperature: 0.4,
-    
     systemPrompt: (businessName) => `You are the phone assistant for ${businessName}, a home services company.
 
 ## YOUR ROLE
@@ -85,19 +83,8 @@ When customers ask about services, pricing, hours, or policies, use the 'search_
 - If they're upset: Show empathy first, then focus on solving their problem
 
 ## CRITICAL RULE
-You do NOT have the ability to end calls. The customer will hang up when they're ready. Keep the conversation going naturally until they decide to end it. Never say goodbye in a way that implies you're ending the call.`,
-
+You do NOT have the ability to end calls. The customer will hang up when they're ready. Keep the conversation going naturally until they decide to end it.`,
     firstMessage: (businessName) => `Hi, you've reached ${businessName}. This call may be recorded for quality and training purposes. What can I help you with today?`,
-    
-    summaryPrompt: `You are analyzing a phone call where a CUSTOMER called the business for home services.
-
-Summarize in 2-3 sentences:
-1. Customer name, phone number, and property address
-2. What problem or service the CUSTOMER needs (be specific)
-3. Urgency level (emergency/urgent/routine) and next action
-
-Include special notes like gate codes or access instructions.`,
-
     structuredDataSchema: {
       type: 'object',
       properties: {
@@ -141,7 +128,6 @@ Include special notes like gate codes or access instructions.`,
   medical: {
     voiceId: VOICES.female_soft,
     temperature: 0.4,
-    
     systemPrompt: (businessName) => `You are the receptionist for ${businessName}, a medical/dental practice.
 
 ## YOUR ROLE
@@ -196,18 +182,7 @@ When patients ask about office hours, insurance, services, or policies, use the 
 
 ## CRITICAL RULE
 You do NOT have the ability to end calls. The patient will hang up when they're satisfied. Keep the conversation going naturally until they decide to end it.`,
-
     firstMessage: (businessName) => `Hello, you've reached ${businessName}. This call may be recorded for quality and training purposes. Are you a current patient or would this be your first visit?`,
-    
-    summaryPrompt: `You are analyzing a phone call where a PATIENT called a medical/dental practice.
-
-Summarize in 2-3 sentences:
-1. Patient name, phone, DOB (if provided), and whether new or existing
-2. General reason the PATIENT is calling (HIPAA-compliant - no specific medical details)
-3. Urgency level and next action needed
-
-Note any insurance questions or special accommodations.`,
-
     structuredDataSchema: {
       type: 'object',
       properties: {
@@ -248,7 +223,6 @@ Note any insurance questions or special accommodations.`,
   retail: {
     voiceId: VOICES.female_warm,
     temperature: 0.4,
-    
     systemPrompt: (businessName) => `You are the phone assistant for ${businessName}, a retail store.
 
 ## YOUR ROLE
@@ -295,18 +269,7 @@ When customers ask about products, hours, pricing, or store info, use the 'searc
 
 ## CRITICAL RULE
 You do NOT have the ability to end calls. The customer will hang up when they're done. Keep the conversation going naturally until they decide to end it.`,
-
     firstMessage: (businessName) => `Hi! You've reached ${businessName}. This call may be recorded for quality and training purposes. How can I help you today?`,
-    
-    summaryPrompt: `You are analyzing a phone call where a CUSTOMER called a retail store.
-
-Summarize in 2-3 sentences:
-1. Customer name and phone
-2. What the CUSTOMER is calling about (product inquiry, stock check, order, return, complaint)
-3. Specific products mentioned and next action
-
-Note any high-value opportunities.`,
-
     structuredDataSchema: {
       type: 'object',
       properties: {
@@ -344,7 +307,6 @@ Note any high-value opportunities.`,
   professional_services: {
     voiceId: VOICES.male_professional,
     temperature: 0.4,
-    
     systemPrompt: (businessName) => `You are the professional receptionist for ${businessName}, a professional services firm.
 
 ## YOUR ROLE
@@ -401,18 +363,7 @@ When asked about the firm, services, or procedures, use the 'search_knowledge_ba
 
 ## CRITICAL RULE
 You do NOT have the ability to end calls. The client will hang up when they're ready. Keep the conversation going naturally until they decide to end it.`,
-
     firstMessage: (businessName) => `Hello, you've reached ${businessName}. This call may be recorded for quality and training purposes. How may I help you?`,
-    
-    summaryPrompt: `You are analyzing a phone call where a CLIENT called a professional services firm.
-
-Summarize in 2-3 sentences:
-1. Client name, phone, company (if business), and whether new or existing
-2. General type of matter the CLIENT needs help with (no confidential details)
-3. Urgency level and next action
-
-Note if referral and from whom. Keep it professional.`,
-
     structuredDataSchema: {
       type: 'object',
       properties: {
@@ -453,7 +404,6 @@ Note if referral and from whom. Keep it professional.`,
   restaurants: {
     voiceId: VOICES.female_warm,
     temperature: 0.4,
-    
     systemPrompt: (businessName) => `You are the phone assistant for ${businessName}, a restaurant.
 
 ## YOUR ROLE
@@ -462,24 +412,20 @@ Take reservations, handle takeout orders, answer menu questions, and make people
 ## CONVERSATION FLOW
 1. Ask: "Is this for a reservation or a takeout order?"
 2. Handle based on their response:
-   
    **RESERVATIONS:**
    - Date: "What date would you like?" → "Perfect"
    - Time: "What time works best?" → "Great"
    - Party size: "How many people?" → "Got it"
    - Name: "Name for the reservation?" → "Thank you"
    - Phone: "Best number to reach you?" → Confirm all details
-   
    **TAKEOUT:**
    - Take order item by item, acknowledging each: "Got it", "Perfect"
    - Name: "Name for the order?" → "Thanks"
    - Phone: "Best number to reach you?"
    - Confirm: "[Items] for [name], ready in [time]"
-   
    **MENU QUESTIONS:**
    - Answer enthusiastically using knowledge base
    - Make recommendations
-
 3. Ask: "Is there anything else I can help you with?"
 
 ## COMMUNICATION STYLE
@@ -514,18 +460,7 @@ When asked about the menu, hours, reservations, or restaurant info, use the 'sea
 
 ## CRITICAL RULE
 You do NOT have the ability to end calls. The customer will hang up when they're done. Keep the conversation going naturally until they decide to end it.`,
-
     firstMessage: (businessName) => `Hi! You've reached ${businessName}. This call may be recorded for quality and training purposes. How can I help you?`,
-    
-    summaryPrompt: `You are analyzing a phone call where a CUSTOMER called a restaurant.
-
-Summarize in 2-3 sentences:
-1. Customer name and phone
-2. What the CUSTOMER needs (reservation, takeout, menu question)
-3. Key details: For reservations (party size, date, time). For orders (items, pickup time).
-
-Note dietary restrictions or special requests.`,
-
     structuredDataSchema: {
       type: 'object',
       properties: {
@@ -576,7 +511,6 @@ Note dietary restrictions or special requests.`,
 // ====================================================================
 // CREATE QUERY TOOL (✅ FIXED WITH CORRECT VAPI STRUCTURE)
 // ====================================================================
-
 async function createQueryTool(fileId, businessName, vapiApiKey) {
   try {
     console.log('🔧 Creating Query Tool for knowledge base...');
@@ -623,7 +557,6 @@ async function createQueryTool(fileId, businessName, vapiApiKey) {
     const toolData = await toolResponse.json();
     console.log(`✅ Query Tool created: ${toolData.id}`);
     return toolData.id;
-    
   } catch (error) {
     console.error('❌ Query tool creation error:', error);
     return null;
@@ -631,13 +564,12 @@ async function createQueryTool(fileId, businessName, vapiApiKey) {
 }
 
 // ====================================================================
-// CONFIGURATION BUILDER
+// CONFIGURATION BUILDER (✅ UPDATED - NO ANALYSISPLAN)
 // ====================================================================
-
 function getIndustryConfig(industryFromGHL, businessName, queryToolId = null, ownerPhone = null) {
   const industryKey = INDUSTRY_MAPPING[industryFromGHL] || 'professional_services';
   const config = INDUSTRY_CONFIGS[industryKey];
-  
+
   if (!config) {
     console.error(`⚠️ Unknown industry: ${industryFromGHL}, using professional_services`);
     return getIndustryConfig('Professional Services (legal, accounting)', businessName, queryToolId, ownerPhone);
@@ -645,19 +577,17 @@ function getIndustryConfig(industryFromGHL, businessName, queryToolId = null, ow
 
   // Build tools array (only for non-function tools like transferCall)
   const tools = [];
-  
+
   // Add Transfer Tool if owner phone provided
   if (ownerPhone) {
     tools.push({
       type: 'transferCall',
-      destinations: [
-        {
-          type: 'number',
-          number: ownerPhone,
-          description: 'Transfer to business owner for urgent matters, complex issues, or manager requests',
-          message: 'One moment please, let me connect you with the owner.'
-        }
-      ],
+      destinations: [{
+        type: 'number',
+        number: ownerPhone,
+        description: 'Transfer to business owner for urgent matters, complex issues, or manager requests',
+        message: 'One moment please, let me connect you with the owner.'
+      }],
       messages: [
         {
           type: 'request-start',
@@ -673,7 +603,6 @@ function getIndustryConfig(industryFromGHL, businessName, queryToolId = null, ow
 
   return {
     name: `${businessName} AI Receptionist`,
-    
     model: {
       provider: 'openai',
       model: 'gpt-4o-mini',
@@ -685,59 +614,25 @@ function getIndustryConfig(industryFromGHL, businessName, queryToolId = null, ow
       ...(queryToolId && { toolIds: [queryToolId] }),  // ✅ CORRECT: Use toolIds for function tools
       ...(tools.length > 0 && { tools })  // Other tools like transferCall
     },
-    
     voice: {
       provider: '11labs',
       voiceId: config.voiceId
     },
-    
     firstMessage: config.firstMessage(businessName),
-    
     recordingEnabled: true,
-    
-    serverMessages: ['end-of-call-report', 'transcript', 'status-update'],
-    
-    analysisPlan: {
-      summaryPlan: {
-        enabled: true,
-        timeoutSeconds: 30,
-        messages: [{
-          role: 'system',
-          content: config.summaryPrompt
-        }]
-      },
-      
-      structuredDataPlan: {
-        enabled: true,
-        timeoutSeconds: 30,
-        schema: config.structuredDataSchema,
-        messages: [{
-          role: 'system',
-          content: 'Extract structured data accurately. If a field is not mentioned, leave it empty or null.'
-        }]
-      },
-      
-      successEvaluationPlan: {
-        enabled: true,
-        rubric: 'PassFail',
-        timeoutSeconds: 30,
-        messages: [{
-          role: 'system',
-          content: 'Evaluate if this call was successful. A call is successful if the AI assistant collected the required customer information (name, phone number) and addressed the customer\'s inquiry appropriately. Return true if successful, false otherwise.'
-        }]
-      }
-    }
+    serverMessages: ['end-of-call-report', 'transcript', 'status-update']
+    // ❌ REMOVED analysisPlan - VAPI bug causes empty messages array
+    // Summary generation now handled in webhook
   };
 }
 
 // ====================================================================
 // VAPI ASSISTANT MANAGEMENT
 // ====================================================================
-
 async function createIndustryAssistant(businessName, industry, knowledgeBaseData = null, ownerPhone = null, serverUrl = null) {
   try {
     console.log(`🎯 Creating ${industry} assistant for ${businessName}`);
-    
+
     // Create Query Tool if knowledge base exists
     let queryToolId = null;
     if (knowledgeBaseData && knowledgeBaseData.fileId) {
@@ -748,10 +643,10 @@ async function createIndustryAssistant(businessName, industry, knowledgeBaseData
         console.log('⚠️ Query Tool creation failed, continuing without KB access');
       }
     }
-    
+
     const config = getIndustryConfig(industry, businessName, queryToolId, ownerPhone);
     config.serverUrl = serverUrl || process.env.BACKEND_URL + '/webhook/vapi';
-    
+
     console.log(`📝 Industry: ${INDUSTRY_MAPPING[industry] || 'default'}`);
     console.log(`🤖 Model: ${config.model.model}`);
     console.log(`🎤 Voice: ElevenLabs - ${config.voice.voiceId}`);
@@ -759,7 +654,7 @@ async function createIndustryAssistant(businessName, industry, knowledgeBaseData
     if (knowledgeBaseData) console.log(`📚 Knowledge Base: ${knowledgeBaseData.knowledgeBaseId}`);
     if (queryToolId) console.log(`🔧 Query Tool: ${queryToolId}`);
     if (ownerPhone) console.log(`📞 Transfer enabled to: ${ownerPhone}`);
-    
+
     const response = await fetch('https://api.vapi.ai/assistant', {
       method: 'POST',
       headers: {
@@ -776,7 +671,6 @@ async function createIndustryAssistant(businessName, industry, knowledgeBaseData
 
     const assistant = await response.json();
     console.log(`✅ Industry assistant created: ${assistant.id}`);
-    
     return assistant;
   } catch (error) {
     console.error('❌ Error creating industry assistant:', error);
