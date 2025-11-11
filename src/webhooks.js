@@ -21,13 +21,13 @@ async function sendUsageWarningEmail(client, currentCalls, limit) {
         from: 'CallBird <notifications@callbirdai.com>',
         to: [client.email],
         subject: '⚠️ CallBird: 80% of Monthly Calls Used',
-        html: `
+        html: \`
           <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
             <h2 style="color: #F59E0B;">You're approaching your call limit</h2>
-            <p>Hi ${client.contact_name || client.business_name},</p>
-            <p>You've used <strong>${currentCalls} of ${limit} calls</strong> (${Math.round((currentCalls/limit)*100)}%) this month.</p>
+            <p>Hi \${client.contact_name || client.business_name},</p>
+            <p>You've used <strong>\${currentCalls} of \${limit} calls</strong> (\${Math.round((currentCalls/limit)*100)}%) this month.</p>
             <div style="background: #FEF3C7; border-left: 4px solid #F59E0B; padding: 16px; margin: 20px 0;">
-              <p style="margin: 0;"><strong>📊 Usage: ${currentCalls}/${limit} calls</strong></p>
+              <p style="margin: 0;"><strong>📊 Usage: \${currentCalls}/\${limit} calls</strong></p>
             </div>
             <p><strong>Upgrade to avoid service interruption:</strong></p>
             <ul>
@@ -42,7 +42,7 @@ async function sendUsageWarningEmail(client, currentCalls, limit) {
             </div>
             <p style="color: #666; font-size: 14px;">Your plan resets at the start of next month.</p>
           </div>
-        `
+        \`
       })
     });
 
@@ -71,11 +71,11 @@ async function sendLimitReachedEmail(client, limit) {
         from: 'CallBird <notifications@callbirdai.com>',
         to: [client.email],
         subject: '🚨 CallBird: Monthly Call Limit Reached',
-        html: `
+        html: \`
           <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
             <h2 style="color: #dc2626;">You've reached your monthly call limit</h2>
-            <p>Hi ${client.contact_name || client.business_name},</p>
-            <p>You've used all <strong>${limit} calls</strong> included in your current plan.</p>
+            <p>Hi \${client.contact_name || client.business_name},</p>
+            <p>You've used all <strong>\${limit} calls</strong> included in your current plan.</p>
             <div style="background: #FEF2F2; border-left: 4px solid #dc2626; padding: 16px; margin: 20px 0;">
               <p style="margin: 0; color: #991b1b;"><strong>⚠️ Additional calls are now being blocked</strong></p>
             </div>
@@ -92,7 +92,7 @@ async function sendLimitReachedEmail(client, limit) {
             </div>
             <p style="color: #666; font-size: 14px;">Your call count resets at the start of next billing cycle.</p>
           </div>
-        `
+        \`
       })
     });
 
@@ -122,13 +122,13 @@ function formatPhoneE164(phone) {
   
   // Handle different lengths
   if (digits.length === 11 && digits.startsWith('1')) {
-    return `+${digits}`;
+    return \`+\${digits}\`;
   }
   if (digits.length === 10) {
-    return `+1${digits}`;
+    return \`+1\${digits}\`;
   }
   if (digits.length === 11) {
-    return `+${digits}`;
+    return \`+\${digits}\`;
   }
   
   // If already formatted correctly
@@ -136,7 +136,7 @@ function formatPhoneE164(phone) {
     return phone.replace(/[^\d+]/g, '');
   }
   
-  console.log(`⚠️ Invalid phone format: ${phone}`);
+  console.log(\`⚠️ Invalid phone format: \${phone}\`);
   return null;
 }
 
@@ -149,13 +149,13 @@ function formatPhoneDisplay(phone) {
   
   // Handle 10 digits (US number without country code)
   if (cleaned.length === 10) {
-    return `(${cleaned.substring(0,3)}) ${cleaned.substring(3,6)}-${cleaned.substring(6)}`;
+    return \`(\${cleaned.substring(0,3)}) \${cleaned.substring(3,6)}-\${cleaned.substring(6)}\`;
   }
   
   // Handle 11 digits (US number with country code 1)
   if (cleaned.length === 11 && cleaned.startsWith('1')) {
     const without1 = cleaned.substring(1);
-    return `(${without1.substring(0,3)}) ${without1.substring(3,6)}-${without1.substring(6)}`;
+    return \`(\${without1.substring(0,3)}) \${without1.substring(3,6)}-\${without1.substring(6)}\`;
   }
   
   // Return as-is if format doesn't match
@@ -166,10 +166,10 @@ function formatPhoneDisplay(phone) {
 async function getPhoneNumberFromVapi(phoneNumberId) {
   try {
     const response = await axios.get(
-      `https://api.vapi.ai/phone-number/${phoneNumberId}`,
+      \`https://api.vapi.ai/phone-number/\${phoneNumberId}\`,
       {
         headers: {
-          'Authorization': `Bearer ${process.env.VAPI_API_KEY}`
+          'Authorization': \`Bearer \${process.env.VAPI_API_KEY}\`
         }
       }
     );
@@ -186,14 +186,14 @@ async function findGHLContact(phone) {
     console.log('🔍 Searching for GHL contact:', phone);
     
     const response = await axios.get(
-      `https://services.leadconnectorhq.com/contacts/search/duplicate`,
+      \`https://services.leadconnectorhq.com/contacts/search/duplicate\`,
       {
         params: {
           locationId: process.env.GHL_LOCATION_ID,
           number: phone
         },
         headers: {
-          'Authorization': `Bearer ${process.env.GHL_API_KEY}`,
+          'Authorization': \`Bearer \${process.env.GHL_API_KEY}\`,
           'Version': '2021-07-28'
         }
       }
@@ -237,7 +237,7 @@ async function createGHLContact(phone, name = null) {
       contactData,
       {
         headers: {
-          'Authorization': `Bearer ${process.env.GHL_API_KEY}`,
+          'Authorization': \`Bearer \${process.env.GHL_API_KEY}\`,
           'Content-Type': 'application/json',
           'Version': '2021-07-28'
         }
@@ -268,7 +268,7 @@ async function sendGHLSMS(toPhone, message, businessOwnerName = null) {
     // Format phone to E.164
     const formattedPhone = formatPhoneE164(toPhone);
     if (!formattedPhone) {
-      throw new Error(`Invalid phone format: ${toPhone}`);
+      throw new Error(\`Invalid phone format: \${toPhone}\`);
     }
     console.log('   Formatted phone:', formattedPhone);
     
@@ -296,7 +296,7 @@ async function sendGHLSMS(toPhone, message, businessOwnerName = null) {
       },
       {
         headers: {
-          'Authorization': `Bearer ${process.env.GHL_API_KEY}`,
+          'Authorization': \`Bearer \${process.env.GHL_API_KEY}\`,
           'Content-Type': 'application/json',
           'Version': '2021-07-28'
         }
@@ -383,10 +383,10 @@ function detectUrgency(transcript) {
 }
 
 // ============================================
-// ✅ AI-POWERED SUMMARY GENERATOR (REPLACES VAPI)
+// ✅ AI-POWERED SUMMARY & DATA EXTRACTION (REPLACES VAPI)
 // ============================================
-async function generateAISummary(transcript, industry, customerName, customerPhone, customerEmail, urgency) {
-  console.log('🤖 Generating AI-powered summary using Claude API (VAPI analysis disabled due to bug)');
+async function generateAISummaryAndExtractData(transcript, industry, callerPhone) {
+  console.log('🤖 Generating AI-powered summary and extracting structured data using Claude API');
   
   // Industry-specific guidance for Claude
   const industryGuidance = {
@@ -398,28 +398,32 @@ async function generateAISummary(transcript, industry, customerName, customerPho
   };
 
   // Build the prompt for Claude
-  const prompt = `You are analyzing a phone call transcript for a ${industry} business.
+  const prompt = \`You are analyzing a phone call transcript for a \${industry} business.
 
-Customer Information:
-- Name: ${customerName}
-- Phone: ${customerPhone}
-${customerEmail ? `- Email: ${customerEmail}` : ''}
-- Detected Urgency: ${urgency}
-
-Instructions:
-${industryGuidance[industry] || 'Provide a detailed summary of what the customer needs.'}
-
-Create a professional 2-3 sentence summary that:
-1. States who called with their contact information
-2. Explains SPECIFICALLY what they need (be detailed and actionable, not vague)
-3. Notes timing/urgency and what action the business should take next
-
-Be specific and avoid generic phrases. If the customer mentioned specific details (addresses, dates, product names, issues), include them.
+Your task is to extract structured data AND generate a professional summary.
 
 Call Transcript:
-${transcript}
+\${transcript}
 
-Generate a detailed summary:`;
+Caller's Phone Number: \${callerPhone}
+
+Instructions:
+1. Extract the customer's name from the transcript (look for phrases like "my name is", "this is", "I'm", etc.)
+2. Extract the customer's phone number if they provide one (otherwise use the caller's number provided above)
+3. Extract the customer's email if mentioned
+4. Assess urgency level based on keywords (emergency, urgent, asap, soon, routine, etc.)
+5. Generate a professional 2-3 sentence summary focusing on: \${industryGuidance[industry] || 'what the customer needs and next steps'}
+
+CRITICAL: Respond with ONLY a valid JSON object. Do not include any text outside the JSON structure. No markdown, no backticks, no explanations.
+
+JSON Format:
+{
+  "customerName": "string (or 'Unknown' if not found)",
+  "customerPhone": "string (format as (XXX) XXX-XXXX if US number)",
+  "customerEmail": "string or null",
+  "urgency": "emergency|high|medium|routine",
+  "summary": "2-3 sentence professional summary with specific details"
+}\`;
 
   try {
     const response = await fetch("https://api.anthropic.com/v1/messages", {
@@ -431,7 +435,7 @@ Generate a detailed summary:`;
       },
       body: JSON.stringify({
         model: "claude-sonnet-4-20250514",
-        max_tokens: 300,
+        max_tokens: 500,
         temperature: 0.3,
         messages: [{
           role: "user",
@@ -443,34 +447,59 @@ Generate a detailed summary:`;
     if (!response.ok) {
       const errorText = await response.text();
       console.error('❌ Claude API error:', response.status, errorText);
-      throw new Error(`Claude API failed: ${response.status}`);
+      throw new Error(\`Claude API failed: \${response.status}\`);
     }
 
     const data = await response.json();
-    const aiSummary = data.content[0].text.trim();
+    let responseText = data.content[0].text.trim();
     
-    console.log('✅ AI-generated summary:', aiSummary);
-    console.log('💰 Claude API cost: ~$0.003');
+    // Strip markdown code blocks if present
+    responseText = responseText.replace(/\`\`\`json\n?/g, "").replace(/\`\`\`\n?/g, "").trim();
     
-    return aiSummary;
+    // Parse JSON response
+    const extractedData = JSON.parse(responseText);
+    
+    console.log('✅ AI-extracted data:', {
+      name: extractedData.customerName,
+      phone: extractedData.customerPhone,
+      email: extractedData.customerEmail,
+      urgency: extractedData.urgency
+    });
+    console.log('✅ AI-generated summary:', extractedData.summary);
+    console.log('💰 Claude API cost: ~$0.004');
+    
+    return extractedData;
   } catch (error) {
     console.error('❌ Failed to generate AI summary:', error.message);
     
-    // Fallback to basic summary if API fails
-    console.log('⚠️ Using fallback summary due to API error');
-    let fallback = `${customerName} (${customerPhone}) called`;
+    // Fallback to regex extraction if API fails
+    console.log('⚠️ Using fallback extraction due to API error');
+    
+    const customerName = extractCustomerName(transcript);
+    const rawCustomerPhone = extractPhoneNumber(transcript) || callerPhone;
+    const customerPhone = formatPhoneDisplay(rawCustomerPhone);
+    const customerEmail = extractEmail(transcript);
+    const urgency = detectUrgency(transcript);
+    
+    let fallbackSummary = \`\${customerName} (\${customerPhone}) called\`;
     
     if (urgency === 'high' || urgency === 'emergency') {
-      fallback += ' with an URGENT request';
+      fallbackSummary += ' with an URGENT request';
     }
     
-    fallback += ` regarding ${industry.replace('_', ' ')} services. Team should follow up promptly.`;
+    fallbackSummary += \` regarding \${industry.replace('_', ' ')} services. Team should follow up promptly.\`;
     
     if (customerEmail) {
-      fallback += ` Email: ${customerEmail}`;
+      fallbackSummary += \` Email: \${customerEmail}\`;
     }
     
-    return fallback;
+    return {
+      customerName,
+      customerPhone,
+      customerEmail,
+      urgency,
+      summary: fallbackSummary
+    };
   }
 }
 
@@ -516,12 +545,12 @@ async function handleVapiWebhook(req, res) {
       const currentCallCount = client.calls_this_month || 0;
       const callLimit = client.monthly_call_limit || 100;
       
-      console.log(`📊 Current usage: ${currentCallCount}/${callLimit} calls`);
+      console.log(\`📊 Current usage: \${currentCallCount}/\${callLimit} calls\`);
       
       if (currentCallCount >= callLimit) {
-        console.log(`🚫 CALL BLOCKED: ${client.business_name} has reached limit`);
-        console.log(`   Usage: ${currentCallCount}/${callLimit}`);
-        console.log(`   Plan: ${client.plan_type}`);
+        console.log(\`🚫 CALL BLOCKED: \${client.business_name} has reached limit\`);
+        console.log(\`   Usage: \${currentCallCount}/\${callLimit}\`);
+        console.log(\`   Plan: \${client.plan_type}\`);
         
         // Send limit reached email if this is the first blocked call
         if (currentCallCount === callLimit) {
@@ -536,36 +565,32 @@ async function handleVapiWebhook(req, res) {
           reason: 'Monthly call limit reached',
           currentUsage: currentCallCount,
           limit: callLimit,
-          message: `Client ${client.business_name} has used all ${callLimit} calls for this billing period`
+          message: \`Client \${client.business_name} has used all \${callLimit} calls for this billing period\`
         });
       }
       
-      console.log(`✅ Within limit, processing call...`);
+      console.log(\`✅ Within limit, processing call...\`);
       
       // ============================================
-      // ✅ EXTRACT DATA & GENERATE CUSTOM SUMMARY
+      // ✅ EXTRACT DATA & GENERATE CUSTOM SUMMARY (SINGLE API CALL)
       // ============================================
       const transcript = message.transcript || '';
       const callerPhone = call.customer?.number || 'Unknown';
       
       console.log('📝 Transcript length:', transcript.length, 'chars');
       
-      // Extract basic data from transcript
-      const customerName = extractCustomerName(transcript);
-      const rawCustomerPhone = extractPhoneNumber(transcript) || callerPhone;
-      const customerPhone = formatPhoneDisplay(rawCustomerPhone);
-      const customerEmail = extractEmail(transcript);
-      const urgency = detectUrgency(transcript);
-      
-      // ✅ GENERATE AI-POWERED SUMMARY (replaces broken VAPI analysis)
-      const aiSummary = await generateAISummary(
+      // ✅ GENERATE AI-POWERED SUMMARY AND EXTRACT ALL DATA (replaces broken VAPI analysis + regex)
+      const aiData = await generateAISummaryAndExtractData(
         transcript,
         client.industry,
-        customerName,
-        customerPhone,
-        customerEmail,
-        urgency
+        callerPhone
       );
+      
+      const customerName = aiData.customerName;
+      const customerPhone = aiData.customerPhone;
+      const customerEmail = aiData.customerEmail;
+      const urgency = aiData.urgency;
+      const aiSummary = aiData.summary;
       
       console.log('📊 Extracted data:');
       console.log('   Customer Name:', customerName);
@@ -632,12 +657,12 @@ async function handleVapiWebhook(req, res) {
           .update({ calls_this_month: newCallCount })
           .eq('id', client.id);
         
-        console.log(`✅ Call count updated: ${newCallCount}/${callLimit}`);
+        console.log(\`✅ Call count updated: \${newCallCount}/\${callLimit}\`);
         
         // Check if approaching limit (80%)
         const usagePercent = (newCallCount / callLimit) * 100;
         if (usagePercent >= 80 && usagePercent < 100) {
-          console.log(`⚠️ Client ${client.email} at ${usagePercent.toFixed(0)}% of call limit`);
+          console.log(\`⚠️ Client \${client.email} at \${usagePercent.toFixed(0)}% of call limit\`);
           
           // Send warning email at exactly 80%
           if (newCallCount === Math.floor(callLimit * 0.8)) {
@@ -647,7 +672,7 @@ async function handleVapiWebhook(req, res) {
         
         // Check if limit just reached (100%)
         if (newCallCount >= callLimit) {
-          console.log(`🚨 Client ${client.email} reached call limit!`);
+          console.log(\`🚨 Client \${client.email} reached call limit!\`);
           
           // Send limit reached email (only once at exactly the limit)
           if (newCallCount === callLimit) {
@@ -675,17 +700,17 @@ async function handleVapiWebhook(req, res) {
           console.log('❌ Could not format owner phone number:', client.owner_phone);
         } else {
           // Build SMS message
-          let smsMessage = `🔔 New Call - ${client.business_name}\n\n`;
-          smsMessage += `Customer: ${customerName}\n`;
-          smsMessage += `Phone: ${customerPhone}\n`;
+          let smsMessage = \`🔔 New Call - \${client.business_name}\n\n\`;
+          smsMessage += \`Customer: \${customerName}\n\`;
+          smsMessage += \`Phone: \${customerPhone}\n\`;
           if (customerEmail) {
-            smsMessage += `Email: ${customerEmail}\n`;
+            smsMessage += \`Email: \${customerEmail}\n\`;
           }
           if (urgency === 'high' || urgency === 'emergency') {
-            smsMessage += `⚠️ Urgency: HIGH\n`;
+            smsMessage += \`⚠️ Urgency: HIGH\n\`;
           }
-          smsMessage += `\nSummary: ${aiSummary}\n\n`;
-          smsMessage += `View full details in your CallBird dashboard.`;
+          smsMessage += \`\nSummary: \${aiSummary}\n\n\`;
+          smsMessage += \`View full details in your CallBird dashboard.\`;
           
           console.log('📝 SMS message prepared');
           
