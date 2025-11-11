@@ -383,92 +383,95 @@ function detectUrgency(transcript) {
 }
 
 // ============================================
-// ✅ CUSTOM SUMMARY GENERATOR (REPLACES VAPI)
+// ✅ AI-POWERED SUMMARY GENERATOR (REPLACES VAPI)
 // ============================================
-function generateSmartSummary(transcript, customerName, customerPhone, customerEmail, urgency, industry) {
-  console.log('🤖 Generating custom summary (VAPI analysis disabled due to bug)');
+async function generateAISummary(transcript, industry, customerName, customerPhone, customerEmail, urgency) {
+  console.log('🤖 Generating AI-powered summary using Claude API (VAPI analysis disabled due to bug)');
   
-  // Extract key details from transcript
-  const lowerTranscript = transcript.toLowerCase();
-  
-  // Detect common phrases/keywords
-  const issueKeywords = {
-    home_services: ['leak', 'broken', 'repair', 'install', 'fix', 'replace', 'water', 'heater', 'plumbing', 'hvac', 'electrical', 'drain', 'pipe', 'toilet', 'sink', 'ac', 'furnace'],
-    medical: ['appointment', 'checkup', 'pain', 'sick', 'doctor', 'dentist', 'cleaning', 'exam', 'insurance', 'new patient'],
-    retail: ['product', 'order', 'buy', 'purchase', 'stock', 'price', 'available', 'return', 'exchange'],
-    professional_services: ['consultation', 'legal', 'tax', 'business', 'contract', 'lawsuit', 'advice', 'accounting'],
-    restaurants: ['reservation', 'table', 'party', 'takeout', 'delivery', 'menu', 'order', 'tonight', 'tomorrow']
+  // Industry-specific guidance for Claude
+  const industryGuidance = {
+    home_services: 'Focus on: the specific problem or issue (be detailed - "water heater leaking" not just "plumbing issue"), property location if mentioned, urgency level (emergency vs routine), and what specific service is needed.',
+    medical: 'Focus on: appointment type (new patient, checkup, follow-up), existing vs new patient status, general reason for visit (HIPAA-compliant - no specific medical details), urgency level, and any insurance questions.',
+    retail: 'Focus on: specific products discussed, customer intent (browsing, purchasing, returning, stock check), product details or specifications mentioned, and visit plans.',
+    professional_services: 'Focus on: general matter type (no confidential details - just category like "business consultation" or "tax preparation"), whether new or existing client, urgency or deadlines, and recommended next steps.',
+    restaurants: 'Focus on: reservation vs takeout/delivery, party size and date/time if reservation, specific menu items if order, dietary restrictions or allergies, special occasions (birthday, anniversary).'
   };
-  
-  // Find mentioned keywords
-  const relevantKeywords = issueKeywords[industry] || [];
-  const mentionedIssues = relevantKeywords.filter(keyword => lowerTranscript.includes(keyword));
-  
-  // Detect timing/scheduling
-  const hasToday = lowerTranscript.includes('today');
-  const hasTomorrow = lowerTranscript.includes('tomorrow');
-  const hasThisWeek = lowerTranscript.includes('this week');
-  const hasNextWeek = lowerTranscript.includes('next week');
-  
-  // Build summary based on industry
-  let summary = '';
-  
-  // Sentence 1: Who called and their contact info
-  if (customerName && customerName !== 'Unknown') {
-    summary += `${customerName}`;
-    if (customerPhone && customerPhone !== 'Unknown') {
-      summary += ` (${customerPhone})`;
+
+  // Build the prompt for Claude
+  const prompt = `You are analyzing a phone call transcript for a ${industry} business.
+
+Customer Information:
+- Name: ${customerName}
+- Phone: ${customerPhone}
+${customerEmail ? `- Email: ${customerEmail}` : ''}
+- Detected Urgency: ${urgency}
+
+Instructions:
+${industryGuidance[industry] || 'Provide a detailed summary of what the customer needs.'}
+
+Create a professional 2-3 sentence summary that:
+1. States who called with their contact information
+2. Explains SPECIFICALLY what they need (be detailed and actionable, not vague)
+3. Notes timing/urgency and what action the business should take next
+
+Be specific and avoid generic phrases. If the customer mentioned specific details (addresses, dates, product names, issues), include them.
+
+Call Transcript:
+${transcript}
+
+Generate a detailed summary:`;
+
+  try {
+    const response = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": process.env.ANTHROPIC_API_KEY,
+        "anthropic-version": "2023-06-01"
+      },
+      body: JSON.stringify({
+        model: "claude-sonnet-4-20250514",
+        max_tokens: 300,
+        temperature: 0.3,
+        messages: [{
+          role: "user",
+          content: prompt
+        }]
+      })
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('❌ Claude API error:', response.status, errorText);
+      throw new Error(`Claude API failed: ${response.status}`);
     }
-    summary += ' called';
-  } else {
-    summary += 'Customer called';
-    if (customerPhone && customerPhone !== 'Unknown') {
-      summary += ` (${customerPhone})`;
+
+    const data = await response.json();
+    const aiSummary = data.content[0].text.trim();
+    
+    console.log('✅ AI-generated summary:', aiSummary);
+    console.log('💰 Claude API cost: ~$0.003');
+    
+    return aiSummary;
+  } catch (error) {
+    console.error('❌ Failed to generate AI summary:', error.message);
+    
+    // Fallback to basic summary if API fails
+    console.log('⚠️ Using fallback summary due to API error');
+    let fallback = `${customerName} (${customerPhone}) called`;
+    
+    if (urgency === 'high' || urgency === 'emergency') {
+      fallback += ' with an URGENT request';
     }
+    
+    fallback += ` regarding ${industry.replace('_', ' ')} services. Team should follow up promptly.`;
+    
+    if (customerEmail) {
+      fallback += ` Email: ${customerEmail}`;
+    }
+    
+    return fallback;
   }
-  
-  // Sentence 2: What they need (industry-specific)
-  if (mentionedIssues.length > 0) {
-    const topIssues = mentionedIssues.slice(0, 3).join(', ');
-    summary += ` regarding ${topIssues}`;
-  } else {
-    // Generic fallback based on industry
-    const genericReasons = {
-      home_services: 'a service request',
-      medical: 'an appointment',
-      retail: 'product information',
-      professional_services: 'professional services',
-      restaurants: 'a reservation or order'
-    };
-    summary += ` regarding ${genericReasons[industry] || 'assistance'}`;
-  }
-  summary += '.';
-  
-  // Sentence 3: Urgency and timing
-  if (urgency === 'high' || urgency === 'emergency') {
-    summary += ' URGENT request.';
-  } else if (hasToday) {
-    summary += ' Needs service today.';
-  } else if (hasTomorrow) {
-    summary += ' Requesting service for tomorrow.';
-  } else if (hasThisWeek) {
-    summary += ' Looking for service this week.';
-  } else if (hasNextWeek) {
-    summary += ' Interested in next week.';
-  } else {
-    summary += ' Flexible on timing.';
-  }
-  
-  // Add email if provided
-  if (customerEmail) {
-    summary += ` Email: ${customerEmail}.`;
-  }
-  
-  // Add next action
-  summary += ' Team should follow up promptly.';
-  
-  console.log('✅ Custom summary generated:', summary);
-  return summary;
 }
 
 // ============================================
@@ -554,14 +557,14 @@ async function handleVapiWebhook(req, res) {
       const customerEmail = extractEmail(transcript);
       const urgency = detectUrgency(transcript);
       
-      // ✅ GENERATE CUSTOM SUMMARY (replaces broken VAPI analysis)
-      const aiSummary = generateSmartSummary(
+      // ✅ GENERATE AI-POWERED SUMMARY (replaces broken VAPI analysis)
+      const aiSummary = await generateAISummary(
         transcript,
+        client.industry,
         customerName,
         customerPhone,
         customerEmail,
-        urgency,
-        client.industry
+        urgency
       );
       
       console.log('📊 Extracted data:');
