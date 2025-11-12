@@ -225,7 +225,7 @@ async function handleGHLSignup(req, res) {
         trial_ends_at: trialEndsAt,
         status: 'active',
         plan_type: 'starter',
-        monthly_call_limit: 100,
+        monthly_call_limit: 50,
         calls_this_month: 0
       })
       .select()

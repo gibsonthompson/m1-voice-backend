@@ -62,12 +62,12 @@ async function getClientByStripeCustomerId(customerId) {
 function getPlanDetails(priceId) {
   // Your actual Stripe Price IDs
   const plans = {
-    'price_1SLxCFECyXQyJHEs4qn05Zh9': { name: 'starter', callLimit: 100 },
+    'price_1SLxCFECyXQyJHEs4qn05Zh9': { name: 'starter', callLimit: 50 },
     'price_1SLxBDECyXQyJHEsweVK4Qwh': { name: 'professional', callLimit: 250 },
     'price_1SLxC4ECyXQyJHEss4ctfu8c': { name: 'enterprise', callLimit: 500 },
   };
   
-  return plans[priceId] || { name: 'starter', callLimit: 100 };
+  return plans[priceId] || { name: 'starter', callLimit: 50 };
 }
 
 // Helper: Re-enable VAPI assistant after payment

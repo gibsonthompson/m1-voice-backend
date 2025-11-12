@@ -348,7 +348,7 @@ function getTrialExpiredEmail(clientData) {
 
       <div class="pricing-info">
         <h3>Plans Starting at $49/month</h3>
-        <p><strong>Starter:</strong> $49/mo (100 calls) • <strong>Professional:</strong> $99/mo (250 calls) • <strong>Enterprise:</strong> $199/mo (500 calls)</p>
+        <p><strong>Starter:</strong> $49/mo (50 calls) • <strong>Professional:</strong> $99/mo (250 calls) • <strong>Enterprise:</strong> $199/mo (500 calls)</p>
       </div>
 
       <div style="text-align: center;">
