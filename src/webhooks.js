@@ -752,4 +752,12 @@ async function handleVapiWebhook(req, res) {
   }
 }
 
-module.exports = { handleVapiWebhook };
+// ============================================
+// 🆕 EXPORT HELPER FUNCTIONS FOR DEMO WEBHOOK
+// ============================================
+module.exports = { 
+  handleVapiWebhook,
+  sendGHLSMS,
+  formatPhoneE164,
+  formatPhoneDisplay
+};

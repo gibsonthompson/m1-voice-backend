@@ -59,6 +59,12 @@ app.use('/api/webhooks/ghl-signup', signupLimiter);
 app.post('/webhook/vapi', vapiWebhook.handleVapiWebhook);
 
 // ============================================
+// 🆕 VAPI DEMO WEBHOOK - TRIAL SIGNUPS
+// ============================================
+const demoWebhook = require('./routes/demo-webhook');
+app.use('/webhook/vapi', demoWebhook);
+
+// ============================================
 // 🆕 KNOWLEDGE BASE UPDATE ENDPOINT
 // ============================================
 app.post('/api/knowledge-base/update', updateKnowledgeBase);
@@ -129,6 +135,7 @@ app.get('/', (req, res) => {
     environment: process.env.NODE_ENV || 'development',
     routes: {
       vapi: '/webhook/vapi',
+      vapiDemo: '/webhook/vapi/demo-trial-signup', // 🆕 ADDED
       stripe: '/api/webhooks/stripe',
       knowledgeBase: '/api/knowledge-base/update', // 🆕 ADD THIS
       cron: '/api/cron/check-trials',
@@ -193,6 +200,7 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log(`   Signups: 3 req/hour per IP`);
   console.log(`\n📍 Critical Routes:`);
   console.log(`   POST /webhook/vapi - VAPI call webhooks`);
+  console.log(`   POST /webhook/vapi/demo-trial-signup - Demo trial signups`); // 🆕 ADDED
   console.log(`   POST /api/webhooks/stripe - Stripe payment webhooks`);
   console.log(`   POST /api/webhooks/ghl-signup - GoHighLevel signups`);
   console.log(`   POST /api/knowledge-base/update - Knowledge base updates`); // 🆕 ADD THIS
