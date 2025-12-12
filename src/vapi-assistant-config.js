@@ -1,5 +1,5 @@
 // ====================================================================
-// VAPI ASSISTANT CONFIGURATION - Industry-Specific Templates (V4.9)
+// VAPI ASSISTANT CONFIGURATION - Industry-Specific Templates (V4.9.1)
 // ====================================================================
 // FIXES:
 // 1. Changed home_services voice to Adam (better quality)
@@ -7,6 +7,7 @@
 // 3. FIXED Query Tool to use correct VAPI structure with fileIds
 // 4. ❌ REMOVED analysisPlan - VAPI bug causing empty messages array
 //    Summary generation now handled in webhook
+// 5. ✅ ADDED sanitizeAssistantName() - Fixes 40-char VAPI name limit
 // ====================================================================
 const fetch = require('node-fetch');
 
@@ -26,6 +27,23 @@ const VOICES = {
   male_adam: 'pNInz6obpgDQGcFmaJgB',
   female_soft: 'EXAVITQu4vr4xnSDxMaL'
 };
+
+// ====================================================================
+// HELPER FUNCTION - Sanitize Assistant Name to 40 chars max
+// ====================================================================
+function sanitizeAssistantName(businessName) {
+  const suffix = ' AI Receptionist';
+  const maxLength = 40;
+  
+  // If full name fits, use it
+  if ((businessName + suffix).length <= maxLength) {
+    return businessName + suffix;
+  }
+  
+  // Otherwise, truncate business name to fit
+  const availableLength = maxLength - suffix.length;
+  return businessName.slice(0, availableLength).trim() + suffix;
+}
 
 // ====================================================================
 // INDUSTRY CONFIGURATIONS
@@ -564,7 +582,7 @@ async function createQueryTool(fileId, businessName, vapiApiKey) {
 }
 
 // ====================================================================
-// CONFIGURATION BUILDER (✅ UPDATED - NO ANALYSISPLAN)
+// CONFIGURATION BUILDER (✅ UPDATED - NO ANALYSISPLAN + NAME SANITIZATION)
 // ====================================================================
 function getIndustryConfig(industryFromGHL, businessName, queryToolId = null, ownerPhone = null) {
   const industryKey = INDUSTRY_MAPPING[industryFromGHL] || 'professional_services';
@@ -602,7 +620,7 @@ function getIndustryConfig(industryFromGHL, businessName, queryToolId = null, ow
   }
 
   return {
-    name: `${businessName} AI Receptionist`,
+    name: sanitizeAssistantName(businessName),  // ✅ FIXED: Now properly truncates to 40 chars
     model: {
       provider: 'openai',
       model: 'gpt-4o-mini',
@@ -651,6 +669,7 @@ async function createIndustryAssistant(businessName, industry, knowledgeBaseData
     console.log(`🤖 Model: ${config.model.model}`);
     console.log(`🎤 Voice: ElevenLabs - ${config.voice.voiceId}`);
     console.log(`🌡️ Temperature: ${config.model.temperature}`);
+    console.log(`📛 Assistant Name: "${config.name}" (${config.name.length} chars)`);  // ✅ NEW: Log name length
     if (knowledgeBaseData) console.log(`📚 Knowledge Base: ${knowledgeBaseData.knowledgeBaseId}`);
     if (queryToolId) console.log(`🔧 Query Tool: ${queryToolId}`);
     if (ownerPhone) console.log(`📞 Transfer enabled to: ${ownerPhone}`);
@@ -742,5 +761,6 @@ module.exports = {
   createQueryTool,
   disableVAPIAssistant,
   enableVAPIAssistant,
-  INDUSTRY_MAPPING
+  INDUSTRY_MAPPING,
+  sanitizeAssistantName  // ✅ NEW: Export helper for testing
 };
