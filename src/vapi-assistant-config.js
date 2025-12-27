@@ -1,5 +1,5 @@
 // ====================================================================
-// VAPI ASSISTANT CONFIGURATION - Industry-Specific Templates (V4.9.1)
+// VAPI ASSISTANT CONFIGURATION - Industry-Specific Templates (V4.9.2)
 // ====================================================================
 // FIXES:
 // 1. Changed home_services voice to Adam (better quality)
@@ -8,6 +8,9 @@
 // 4. ❌ REMOVED analysisPlan - VAPI bug causing empty messages array
 //    Summary generation now handled in webhook
 // 5. ✅ ADDED sanitizeAssistantName() - Fixes 40-char VAPI name limit
+// 6. ✅ UPDATED temperature to 0.7 for more natural conversations
+// 7. ✅ UPDATED professional_services to remove legal-specific language
+// 8. ✅ UPDATED Adam voice ID to jBzLvP03992lMFEkj2kJ
 // ====================================================================
 const fetch = require('node-fetch');
 
@@ -24,7 +27,7 @@ const INDUSTRY_MAPPING = {
 const VOICES = {
   male_professional: '29vD33N1CtxCmqQRPOHJ',
   female_warm: '21m00Tcm4TlvDq8ikWAM',
-  male_adam: 'pNInz6obpgDQGcFmaJgB',
+  male_adam: 'jBzLvP03992lMFEkj2kJ',
   female_soft: 'EXAVITQu4vr4xnSDxMaL'
 };
 
@@ -54,7 +57,7 @@ const INDUSTRY_CONFIGS = {
   // ================================================================
   home_services: {
     voiceId: VOICES.male_adam,
-    temperature: 0.4,
+    temperature: 0.7,
     systemPrompt: (businessName) => `You are the phone assistant for ${businessName}, a home services company.
 
 ## YOUR ROLE
@@ -145,7 +148,7 @@ You do NOT have the ability to end calls. The customer will hang up when they're
   // ================================================================
   medical: {
     voiceId: VOICES.female_soft,
-    temperature: 0.4,
+    temperature: 0.7,
     systemPrompt: (businessName) => `You are the receptionist for ${businessName}, a medical/dental practice.
 
 ## YOUR ROLE
@@ -240,7 +243,7 @@ You do NOT have the ability to end calls. The patient will hang up when they're 
   // ================================================================
   retail: {
     voiceId: VOICES.female_warm,
-    temperature: 0.4,
+    temperature: 0.7,
     systemPrompt: (businessName) => `You are the phone assistant for ${businessName}, a retail store.
 
 ## YOUR ROLE
@@ -318,12 +321,13 @@ You do NOT have the ability to end calls. The customer will hang up when they're
       required: ['inquiry_type']
     }
   },
-// ================================================================
+
+  // ================================================================
   // 4. PROFESSIONAL SERVICES
   // ================================================================
   professional_services: {
     voiceId: VOICES.male_professional,
-    temperature: 0.4,
+    temperature: 0.7,
     systemPrompt: (businessName) => `You are the professional receptionist for ${businessName}, a professional services company.
 
 ## YOUR ROLE
@@ -402,7 +406,7 @@ You do NOT have the ability to end calls. The client will hang up when they're r
           enum: ['new_client', 'existing_client', 'referral'],
           description: 'Relationship status'
         },
-        service_type: {  // Changed from 'matter_type'
+        service_type: {
           type: 'string',
           description: 'Type of service needed'
         },
@@ -415,12 +419,13 @@ You do NOT have the ability to end calls. The client will hang up when they're r
       required: ['customer_name', 'customer_phone', 'client_type', 'service_type']
     }
   },
+
   // ================================================================
   // 5. RESTAURANTS
   // ================================================================
   restaurants: {
     voiceId: VOICES.female_warm,
-    temperature: 0.4,
+    temperature: 0.7,
     systemPrompt: (businessName) => `You are the phone assistant for ${businessName}, a restaurant.
 
 ## YOUR ROLE
@@ -539,7 +544,7 @@ async function createQueryTool(fileId, businessName, vapiApiKey) {
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        type: 'query',  // ✅ CORRECT: Use "query" not "function"
+        type: 'query',
         async: false,
         function: {
           name: 'search_knowledge_base',
@@ -555,12 +560,12 @@ async function createQueryTool(fileId, businessName, vapiApiKey) {
             required: ['query']
           }
         },
-        knowledgeBases: [{  // ✅ CORRECT: Use knowledgeBases array with fileIds
+        knowledgeBases: [{
           name: `${businessName} Knowledge Base`,
           model: 'gemini-1.5-flash',
           provider: 'google',
           description: `Contains information about ${businessName}'s services, pricing, hours, policies, and company details`,
-          fileIds: [fileId]  // ✅ CORRECT: Use fileId from file upload
+          fileIds: [fileId]
         }]
       })
     });
@@ -619,7 +624,7 @@ function getIndustryConfig(industryFromGHL, businessName, queryToolId = null, ow
   }
 
   return {
-    name: sanitizeAssistantName(businessName),  // ✅ FIXED: Now properly truncates to 40 chars
+    name: sanitizeAssistantName(businessName),
     model: {
       provider: 'openai',
       model: 'gpt-4o-mini',
@@ -628,8 +633,8 @@ function getIndustryConfig(industryFromGHL, businessName, queryToolId = null, ow
         role: 'system', 
         content: config.systemPrompt(businessName)
       }],
-      ...(queryToolId && { toolIds: [queryToolId] }),  // ✅ CORRECT: Use toolIds for function tools
-      ...(tools.length > 0 && { tools })  // Other tools like transferCall
+      ...(queryToolId && { toolIds: [queryToolId] }),
+      ...(tools.length > 0 && { tools })
     },
     voice: {
       provider: '11labs',
@@ -638,8 +643,6 @@ function getIndustryConfig(industryFromGHL, businessName, queryToolId = null, ow
     firstMessage: config.firstMessage(businessName),
     recordingEnabled: true,
     serverMessages: ['end-of-call-report', 'transcript', 'status-update']
-    // ❌ REMOVED analysisPlan - VAPI bug causes empty messages array
-    // Summary generation now handled in webhook
   };
 }
 
@@ -668,7 +671,7 @@ async function createIndustryAssistant(businessName, industry, knowledgeBaseData
     console.log(`🤖 Model: ${config.model.model}`);
     console.log(`🎤 Voice: ElevenLabs - ${config.voice.voiceId}`);
     console.log(`🌡️ Temperature: ${config.model.temperature}`);
-    console.log(`📛 Assistant Name: "${config.name}" (${config.name.length} chars)`);  // ✅ NEW: Log name length
+    console.log(`📛 Assistant Name: "${config.name}" (${config.name.length} chars)`);
     if (knowledgeBaseData) console.log(`📚 Knowledge Base: ${knowledgeBaseData.knowledgeBaseId}`);
     if (queryToolId) console.log(`🔧 Query Tool: ${queryToolId}`);
     if (ownerPhone) console.log(`📞 Transfer enabled to: ${ownerPhone}`);
@@ -761,5 +764,5 @@ module.exports = {
   disableVAPIAssistant,
   enableVAPIAssistant,
   INDUSTRY_MAPPING,
-  sanitizeAssistantName  // ✅ NEW: Export helper for testing
+  sanitizeAssistantName
 };
