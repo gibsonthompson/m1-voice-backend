@@ -1,16 +1,10 @@
 // ====================================================================
-// VAPI ASSISTANT CONFIGURATION - Industry-Specific Templates (V4.9.2)
+// VAPI ASSISTANT CONFIGURATION - Industry-Specific Templates (V4.10)
 // ====================================================================
-// FIXES:
-// 1. Changed home_services voice to Adam (better quality)
-// 2. REVERTED extraction prompt to simple working version
-// 3. FIXED Query Tool to use correct VAPI structure with fileIds
-// 4. ❌ REMOVED analysisPlan - VAPI bug causing empty messages array
-//    Summary generation now handled in webhook
-// 5. ✅ ADDED sanitizeAssistantName() - Fixes 40-char VAPI name limit
-// 6. ✅ UPDATED temperature to 0.7 for more natural conversations
-// 7. ✅ UPDATED professional_services to remove legal-specific language
-// 8. ✅ UPDATED Adam voice ID to jBzLvP03992lMFEkj2kJ
+// UPDATES:
+// 1. ✅ ADDED salon_spa industry configuration
+// 2. Temperature remains at 0.7 for natural conversations
+// 3. Female warm voice for salon/spa (welcoming, pampering tone)
 // ====================================================================
 const fetch = require('node-fetch');
 
@@ -20,7 +14,8 @@ const INDUSTRY_MAPPING = {
   'Medical/Dental': 'medical',
   'Retail/E-commerce': 'retail',
   'Professional Services (legal, accounting)': 'professional_services',
-  'Restaurants/Food Service': 'restaurants'
+  'Restaurants/Food Service': 'restaurants',
+  'Salon/Spa (hair, nails, skincare)': 'salon_spa'
 };
 
 // ElevenLabs Voice IDs
@@ -526,6 +521,170 @@ You do NOT have the ability to end calls. The customer will hang up when they're
         }
       },
       required: ['customer_name', 'customer_phone', 'call_purpose']
+    }
+  },
+
+  // ================================================================
+  // 6. SALON/SPA - NEW
+  // ================================================================
+  salon_spa: {
+    voiceId: VOICES.female_warm,
+    temperature: 0.7,
+    systemPrompt: (businessName) => `You are the welcoming receptionist for ${businessName}, a salon and spa.
+
+## YOUR ROLE
+Book appointments, answer service questions, and make clients feel pampered and excited about their visit. Be warm, friendly, and attentive.
+
+## CONVERSATION FLOW
+1. Ask: "Are you a new client or have you been here before?"
+2. Determine their need:
+   - Booking: "Perfect! What service are you interested in?"
+   - Rescheduling: "No problem! What's your name and when was your appointment?"
+   - Question: Answer using knowledge base, then ask if they'd like to book
+3. For bookings, collect one at a time:
+   - Service: "What are you looking to get done today?" → "Great choice!"
+   - Preferred stylist/tech: (returning clients only) "Do you have someone you usually see?" → "Perfect"
+   - Date preferences: "What dates work best for you?" → "Let me check availability"
+   - Time preferences: "What time of day works better - morning or afternoon?" → "I can do [time]"
+   - Name: "What's your name?" → "Thank you, [name]"
+   - Phone: "Best number to reach you?" → "Got it"
+   - Special occasion: "Is this for a special occasion?" (optional)
+4. Suggest add-ons naturally: "Would you like to add [complementary service]? It pairs beautifully with [their service]"
+5. Confirm appointment: "[Service] on [date] at [time] with [stylist if specified]"
+6. Mention policy gently: "Just a reminder, we ask for 24 hours notice if you need to reschedule"
+7. Ask: "Is there anything else I can help you with?"
+
+## COMMUNICATION STYLE
+- Warm, welcoming, and enthusiastic
+- Sound like you're smiling and genuinely excited for them
+- Use words that evoke relaxation and pampering: "wonderful", "beautiful", "perfect", "love that"
+- Be attentive but not pushy with upsells
+- Make them feel special and cared for
+
+## SERVICE EDUCATION
+Many clients don't know service terminology. Be ready to explain:
+- Balayage vs highlights vs ombre
+- Gel vs acrylic nails
+- Deep tissue vs Swedish massage
+- Facial vs chemical peel
+Use knowledge base to explain services clearly and enthusiastically
+
+## KNOWLEDGE BASE USAGE
+When clients ask about services, pricing, products, or policies, use the 'search_knowledge_base' tool.
+
+**ALWAYS search the knowledge base for:**
+- Service descriptions and what's included
+- Pricing and package deals
+- Stylist/technician specialties and bios
+- Hours of operation and availability
+- First-time client specials or promotions
+- Cancellation and rescheduling policies
+- Product recommendations and retail items
+- Preparation instructions (e.g., "come with clean, dry hair")
+
+**How to use it:**
+- Search the knowledge base BEFORE saying "I don't know" or offering to transfer
+- Be enthusiastic when describing services from the knowledge base
+- Educate clients about service options they might not know about
+- Never make up information about prices, services, or stylist specialties
+- If the knowledge base doesn't contain specific information, offer to have a stylist call them back
+
+## SPECIAL SITUATIONS
+**Same-day requests:**
+- "Let me check if we can fit you in today"
+- If yes: "You're in luck! I have [time] available"
+- If no: "Today is fully booked, but I can get you in tomorrow. Would that work?"
+
+**First-time clients:**
+- Extra welcoming: "We're so excited to have you! You're going to love it here"
+- Ask: "How did you hear about us?" (optional)
+- Explain what to expect: "Your stylist will do a consultation first"
+
+**Wedding/event clients:**
+- Show extra excitement: "How exciting! Congratulations!"
+- Ask event date
+- Suggest trial: "Many brides like to do a trial run. Would you like to schedule that?"
+
+**Consultations:**
+- "For color services, we recommend a consultation first - would you like to schedule that?"
+
+## UPSELLING (Natural, Never Pushy)
+**Good opportunities:**
+- Haircut → "Would you like a deep conditioning treatment? It's amazing"
+- Nails → "We have a great package that includes hand massage for just $10 more"
+- Facial → "Many clients add a lip or eye treatment"
+
+**How to upsell:**
+- Mention it casually and enthusiastically
+- Use social proof: "It's really popular" / "Clients love it"
+- Frame as enhancement, not necessity
+- If they decline: "No problem! You can always add it next time"
+
+## ERROR HANDLING
+- If unclear: "I'm sorry, I didn't quite catch that. Could you say that again?"
+- If service unavailable: "We don't offer that, but we do have [alternative] which is similar!"
+- If fully booked: "That time is taken, but I have [alternative time]. Would that work?"
+- If they're indecisive: "Take your time! I can also explain our services if that helps you decide"
+
+## CRITICAL RULE
+You do NOT have the ability to end calls. The client will hang up when they're ready. Keep the conversation going naturally until they decide to end it.`,
+    firstMessage: (businessName) => `Hi! You've reached ${businessName}. This call may be recorded for quality and training purposes. Are you calling to book an appointment?`,
+    structuredDataSchema: {
+      type: 'object',
+      properties: {
+        customer_name: { 
+          type: 'string',
+          description: 'Client name'
+        },
+        customer_phone: { 
+          type: 'string',
+          description: 'Contact phone'
+        },
+        client_type: {
+          type: 'string',
+          enum: ['new_client', 'returning_client'],
+          description: 'New or returning'
+        },
+        call_purpose: { 
+          type: 'string',
+          enum: ['book_appointment', 'reschedule', 'cancel', 'service_question', 'pricing_question', 'product_question'],
+          description: 'Purpose of call'
+        },
+        service_type: {
+          type: 'string',
+          description: 'Service requested (haircut, color, nails, facial, massage, etc.)'
+        },
+        preferred_provider: {
+          type: 'string',
+          description: 'Preferred stylist or technician name'
+        },
+        appointment_date: {
+          type: 'string',
+          description: 'Requested date (YYYY-MM-DD)'
+        },
+        appointment_time: {
+          type: 'string',
+          description: 'Requested time'
+        },
+        special_occasion: {
+          type: 'string',
+          description: 'Wedding, prom, birthday, etc.'
+        },
+        add_on_services: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Additional services added'
+        },
+        first_time_client: {
+          type: 'boolean',
+          description: 'Is this their first visit'
+        },
+        referral_source: {
+          type: 'string',
+          description: 'How they heard about the salon'
+        }
+      },
+      required: ['customer_name', 'customer_phone', 'client_type', 'call_purpose']
     }
   }
 };
