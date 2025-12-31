@@ -648,9 +648,11 @@ async function handleVapiWebhook(req, res) {
       // ============================================
       console.log('📊 Tracking call usage...');
       
+       const newCallCount = currentCallCount + 1;
+       
       try {
         // Increment call counter
-        const newCallCount = currentCallCount + 1;
+       
         
         // 🆕 CHECK IF THIS IS THE FIRST CALL
         const isFirstCall = newCallCount === 1;
