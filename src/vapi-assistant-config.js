@@ -1,5 +1,5 @@
 // ====================================================================
-// VAPI ASSISTANT CONFIGURATION - Industry-Specific Templates (V4.9.1)
+// VAPI ASSISTANT CONFIGURATION - Industry-Specific Templates (V4.9.2)
 // ====================================================================
 // FIXES:
 // 1. Changed home_services voice to Adam (better quality)
@@ -8,6 +8,9 @@
 // 4. ❌ REMOVED analysisPlan - VAPI bug causing empty messages array
 //    Summary generation now handled in webhook
 // 5. ✅ ADDED sanitizeAssistantName() - Fixes 40-char VAPI name limit
+// 6. ✅ UPDATED temperature to 0.7 for more natural conversations
+// 7. ✅ UPDATED professional_services to remove legal-specific language
+// 8. ✅ UPDATED Adam voice ID to jBzLvP03992lMFEkj2kJ
 // ====================================================================
 const fetch = require('node-fetch');
 
@@ -24,7 +27,7 @@ const INDUSTRY_MAPPING = {
 const VOICES = {
   male_professional: '29vD33N1CtxCmqQRPOHJ',
   female_warm: '21m00Tcm4TlvDq8ikWAM',
-  male_adam: 'pNInz6obpgDQGcFmaJgB',
+  male_adam: 'jBzLvP03992lMFEkj2kJ',
   female_soft: 'EXAVITQu4vr4xnSDxMaL'
 };
 
@@ -54,7 +57,7 @@ const INDUSTRY_CONFIGS = {
   // ================================================================
   home_services: {
     voiceId: VOICES.male_adam,
-    temperature: 0.4,
+    temperature: 0.7,
     systemPrompt: (businessName) => `You are the phone assistant for ${businessName}, a home services company.
 
 ## YOUR ROLE
@@ -145,7 +148,7 @@ You do NOT have the ability to end calls. The customer will hang up when they're
   // ================================================================
   medical: {
     voiceId: VOICES.female_soft,
-    temperature: 0.4,
+    temperature: 0.7,
     systemPrompt: (businessName) => `You are the receptionist for ${businessName}, a medical/dental practice.
 
 ## YOUR ROLE
@@ -240,7 +243,7 @@ You do NOT have the ability to end calls. The patient will hang up when they're 
   // ================================================================
   retail: {
     voiceId: VOICES.female_warm,
-    temperature: 0.4,
+    temperature: 0.7,
     systemPrompt: (businessName) => `You are the phone assistant for ${businessName}, a retail store.
 
 ## YOUR ROLE
@@ -324,8 +327,8 @@ You do NOT have the ability to end calls. The customer will hang up when they're
   // ================================================================
   professional_services: {
     voiceId: VOICES.male_professional,
-    temperature: 0.4,
-    systemPrompt: (businessName) => `You are the professional receptionist for ${businessName}, a professional services firm.
+    temperature: 0.7,
+    systemPrompt: (businessName) => `You are the professional receptionist for ${businessName}, a professional services company.
 
 ## YOUR ROLE
 Greet callers professionally, understand their needs, collect contact information, and route appropriately. Sound confident and competent.
@@ -336,12 +339,12 @@ Greet callers professionally, understand their needs, collect contact informatio
    - Name: "May I have your name?" → "Thank you"
    - Phone: "Best number to reach you?" → "I have that"
    - Company: "Are you calling on behalf of a company?" → "Understood"
-   - Matter type: "What can we help you with?" (general only, NO details)
+   - Service needed: "What can we help you with?" (general only, NO details)
 3. Assess urgency:
-   - Critical deadline: "Let me see if I can connect you with someone immediately"
-   - Important: "Let me schedule a consultation for you"
+   - Critical/Time-sensitive: "Let me see if I can connect you with someone immediately"
+   - Important: "Let me schedule a call for you"
    - Routine: "Our team will call you back today"
-4. Confirm: "I have [name] from [company] at [phone] regarding [matter type]. Our team will [action] [timeframe]."
+4. Confirm: "I have [name] from [company] at [phone] regarding [service type]. Our team will [action] [timeframe]."
 5. Ask: "Is there anything else I can help you with today?"
 
 ## COMMUNICATION STYLE
@@ -351,33 +354,34 @@ Greet callers professionally, understand their needs, collect contact informatio
 - Not overly casual, but still warm
 
 ## BOUNDARIES
-- NEVER give legal advice
+- NEVER make promises about outcomes or results
 - NEVER discuss other clients
-- NEVER make outcome promises
-- If asked about fees: "Our attorney will discuss fees during your consultation"
-- If asked "Do I have a case?": "That's what the consultation will determine"
+- NEVER quote prices without checking first
+- If asked about pricing: "Our team will discuss pricing and options during your consultation"
+- If asked "Can you help me with X?": "That's exactly what the consultation will determine"
 
 ## KNOWLEDGE BASE USAGE
-When asked about the firm, services, or procedures, use the 'search_knowledge_base' tool.
+When asked about the company, services, or procedures, use the 'search_knowledge_base' tool.
 
 **ALWAYS search the knowledge base for:**
 - Office hours and location
-- Practice areas and services offered
+- Services offered and specialties
 - Initial consultation process
-- General firm policies
+- General company policies
 - Areas of expertise
-- Attorney backgrounds (general only)
+- Team backgrounds (general only)
+- Service area coverage
 
 **How to use it:**
 - Search the knowledge base BEFORE saying "I don't know" or offering to transfer
 - Provide professional, accurate answers based on the knowledge base content
 - Never make up information about services, procedures, or policies
-- NEVER provide legal advice or discuss case specifics - redirect those to attorneys
-- If the knowledge base doesn't contain the answer, politely inform the caller that an attorney or staff member will contact them
+- NEVER provide specialized advice or discuss case specifics - redirect those to the team
+- If the knowledge base doesn't contain the answer, politely inform the caller that a team member will contact them
 
 ## ERROR HANDLING
 - If unclear: "I apologize, I didn't quite catch that. Could you repeat that for me?"
-- If asking for advice: "I'm not able to provide legal advice, but our attorneys can discuss that during your consultation."
+- If asking for specific advice: "I'm not able to provide specific guidance, but our team can discuss that during your consultation."
 
 ## CRITICAL RULE
 You do NOT have the ability to end calls. The client will hang up when they're ready. Keep the conversation going naturally until they decide to end it.`,
@@ -402,9 +406,9 @@ You do NOT have the ability to end calls. The client will hang up when they're r
           enum: ['new_client', 'existing_client', 'referral'],
           description: 'Relationship status'
         },
-        matter_type: { 
+        service_type: {
           type: 'string',
-          description: 'General category'
+          description: 'Type of service needed'
         },
         urgency: { 
           type: 'string',
@@ -412,7 +416,7 @@ You do NOT have the ability to end calls. The client will hang up when they're r
           description: 'Time sensitivity'
         }
       },
-      required: ['customer_name', 'customer_phone', 'client_type', 'matter_type']
+      required: ['customer_name', 'customer_phone', 'client_type', 'service_type']
     }
   },
 
@@ -421,7 +425,7 @@ You do NOT have the ability to end calls. The client will hang up when they're r
   // ================================================================
   restaurants: {
     voiceId: VOICES.female_warm,
-    temperature: 0.4,
+    temperature: 0.7,
     systemPrompt: (businessName) => `You are the phone assistant for ${businessName}, a restaurant.
 
 ## YOUR ROLE
@@ -540,7 +544,7 @@ async function createQueryTool(fileId, businessName, vapiApiKey) {
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        type: 'query',  // ✅ CORRECT: Use "query" not "function"
+        type: 'query',
         async: false,
         function: {
           name: 'search_knowledge_base',
@@ -556,12 +560,12 @@ async function createQueryTool(fileId, businessName, vapiApiKey) {
             required: ['query']
           }
         },
-        knowledgeBases: [{  // ✅ CORRECT: Use knowledgeBases array with fileIds
+        knowledgeBases: [{
           name: `${businessName} Knowledge Base`,
           model: 'gemini-1.5-flash',
           provider: 'google',
           description: `Contains information about ${businessName}'s services, pricing, hours, policies, and company details`,
-          fileIds: [fileId]  // ✅ CORRECT: Use fileId from file upload
+          fileIds: [fileId]
         }]
       })
     });
@@ -620,7 +624,7 @@ function getIndustryConfig(industryFromGHL, businessName, queryToolId = null, ow
   }
 
   return {
-    name: sanitizeAssistantName(businessName),  // ✅ FIXED: Now properly truncates to 40 chars
+    name: sanitizeAssistantName(businessName),
     model: {
       provider: 'openai',
       model: 'gpt-4o-mini',
@@ -629,8 +633,8 @@ function getIndustryConfig(industryFromGHL, businessName, queryToolId = null, ow
         role: 'system', 
         content: config.systemPrompt(businessName)
       }],
-      ...(queryToolId && { toolIds: [queryToolId] }),  // ✅ CORRECT: Use toolIds for function tools
-      ...(tools.length > 0 && { tools })  // Other tools like transferCall
+      ...(queryToolId && { toolIds: [queryToolId] }),
+      ...(tools.length > 0 && { tools })
     },
     voice: {
       provider: '11labs',
@@ -639,8 +643,6 @@ function getIndustryConfig(industryFromGHL, businessName, queryToolId = null, ow
     firstMessage: config.firstMessage(businessName),
     recordingEnabled: true,
     serverMessages: ['end-of-call-report', 'transcript', 'status-update']
-    // ❌ REMOVED analysisPlan - VAPI bug causes empty messages array
-    // Summary generation now handled in webhook
   };
 }
 
@@ -669,7 +671,7 @@ async function createIndustryAssistant(businessName, industry, knowledgeBaseData
     console.log(`🤖 Model: ${config.model.model}`);
     console.log(`🎤 Voice: ElevenLabs - ${config.voice.voiceId}`);
     console.log(`🌡️ Temperature: ${config.model.temperature}`);
-    console.log(`📛 Assistant Name: "${config.name}" (${config.name.length} chars)`);  // ✅ NEW: Log name length
+    console.log(`📛 Assistant Name: "${config.name}" (${config.name.length} chars)`);
     if (knowledgeBaseData) console.log(`📚 Knowledge Base: ${knowledgeBaseData.knowledgeBaseId}`);
     if (queryToolId) console.log(`🔧 Query Tool: ${queryToolId}`);
     if (ownerPhone) console.log(`📞 Transfer enabled to: ${ownerPhone}`);
@@ -762,5 +764,5 @@ module.exports = {
   disableVAPIAssistant,
   enableVAPIAssistant,
   INDUSTRY_MAPPING,
-  sanitizeAssistantName  // ✅ NEW: Export helper for testing
+  sanitizeAssistantName
 };
