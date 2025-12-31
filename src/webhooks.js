@@ -644,7 +644,7 @@ async function handleVapiWebhook(req, res) {
       console.log('✅ Call saved successfully');
       
       // ============================================
-      // TRACK CALL USAGE & CHECK LIMITS
+      // 🆕 TRACK CALL USAGE, CHECK LIMITS & FIRST CALL
       // ============================================
       console.log('📊 Tracking call usage...');
       
@@ -652,12 +652,29 @@ async function handleVapiWebhook(req, res) {
         // Increment call counter
         const newCallCount = currentCallCount + 1;
         
+        // 🆕 CHECK IF THIS IS THE FIRST CALL
+        const isFirstCall = newCallCount === 1;
+        
+        // Prepare update object
+        const updateData = { calls_this_month: newCallCount };
+        
+        // 🆕 If first call, mark it!
+        if (isFirstCall) {
+          updateData.first_call_received = true;
+          console.log('🎉 FIRST CALL EVER for client:', client.business_name);
+        }
+        
         await supabase
           .from('clients')
-          .update({ calls_this_month: newCallCount })
+          .update(updateData)
           .eq('id', client.id);
         
         console.log(`✅ Call count updated: ${newCallCount}/${callLimit}`);
+        
+        // 🆕 Log first call celebration
+        if (isFirstCall) {
+          console.log('🎊 First call celebration will trigger on next dashboard visit!');
+        }
         
         // Check if approaching limit (80%)
         const usagePercent = (newCallCount / callLimit) * 100;
@@ -734,6 +751,7 @@ async function handleVapiWebhook(req, res) {
         callId: insertedCall[0]?.id,
         smsSent: smsSent,
         usageTracked: true,
+        firstCall: newCallCount === 1, // 🆕 Return first call flag
         recordingUrl: recordingUrl,
         extractedData: {
           customerName,
