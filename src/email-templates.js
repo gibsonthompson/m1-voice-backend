@@ -1,9 +1,9 @@
 // email-templates.js
-// HTML email templates for trial management
+// HTML email templates for trial management - Updated with correct URLs
 
 function getTrialReminderEmail(clientData, daysLeft) {
   const { business_name, first_name, email, phone_number } = clientData;
-  const upgradeUrl = 'https://start.callbirdai.com/thank-you';
+  const upgradeUrl = 'https://app.callbirdai.com/upgrade-required';
   
   let subject, headline, message;
   
@@ -49,7 +49,7 @@ function getTrialReminderEmail(clientData, daysLeft) {
       box-shadow: 0 2px 8px rgba(0,0,0,0.1);
     }
     .header {
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      background: linear-gradient(135deg, #122092 0%, #1a2bb0 100%);
       padding: 40px 20px;
       text-align: center;
       color: white;
@@ -64,7 +64,7 @@ function getTrialReminderEmail(clientData, daysLeft) {
     }
     .countdown {
       background: #fff3cd;
-      border-left: 4px solid #ffc107;
+      border-left: 4px solid #f6b828;
       padding: 20px;
       margin: 25px 0;
       border-radius: 6px;
@@ -88,7 +88,7 @@ function getTrialReminderEmail(clientData, daysLeft) {
     }
     .benefits h3 {
       margin-top: 0;
-      color: #667eea;
+      color: #122092;
     }
     .benefits ul {
       margin: 15px 0;
@@ -100,7 +100,7 @@ function getTrialReminderEmail(clientData, daysLeft) {
     }
     .cta-button {
       display: inline-block;
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      background: linear-gradient(135deg, #122092 0%, #1a2bb0 100%);
       color: white;
       padding: 16px 40px;
       text-decoration: none;
@@ -109,20 +109,20 @@ function getTrialReminderEmail(clientData, daysLeft) {
       font-weight: 600;
       margin: 25px 0;
       text-align: center;
-      box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+      box-shadow: 0 4px 15px rgba(18, 32, 146, 0.4);
     }
     .cta-button:hover {
-      box-shadow: 0 6px 20px rgba(102, 126, 234, 0.6);
+      box-shadow: 0 6px 20px rgba(18, 32, 146, 0.6);
     }
     .phone-info {
       background: #e7f3ff;
-      border-left: 4px solid #2196F3;
+      border-left: 4px solid #122092;
       padding: 15px;
       margin: 20px 0;
       border-radius: 6px;
     }
     .phone-info strong {
-      color: #1976D2;
+      color: #122092;
     }
     .footer {
       background: #f8f9fa;
@@ -133,7 +133,7 @@ function getTrialReminderEmail(clientData, daysLeft) {
       border-top: 1px solid #e9ecef;
     }
     .footer a {
-      color: #667eea;
+      color: #122092;
       text-decoration: none;
     }
   </style>
@@ -157,7 +157,7 @@ function getTrialReminderEmail(clientData, daysLeft) {
       </div>
 
       <div class="phone-info">
-        <strong>Your CallBird Number:</strong> ${phone_number || 'Not available'}
+        <strong>Your CallBird Number:</strong> ${phone_number || 'Check your dashboard'}
       </div>
 
       <div class="benefits">
@@ -178,7 +178,7 @@ function getTrialReminderEmail(clientData, daysLeft) {
       </div>
 
       <p style="font-size: 14px; color: #666; margin-top: 30px;">
-        Questions? Text us at <strong><a href="sms:+15055573160" style="color: #667eea; text-decoration: none;">(505) 557-3160</a></strong> or visit <a href="https://callbirdai.com" style="color: #667eea;">callbirdai.com</a>
+        Questions? Text us at <strong><a href="sms:+15055573160" style="color: #122092; text-decoration: none;">(505) 557-3160</a></strong> or visit <a href="https://callbirdai.com" style="color: #122092;">callbirdai.com</a>
       </p>
     </div>
 
@@ -198,7 +198,7 @@ function getTrialReminderEmail(clientData, daysLeft) {
 
 function getTrialExpiredEmail(clientData) {
   const { business_name, first_name, email, phone_number } = clientData;
-  const upgradeUrl = 'https://start.callbirdai.com/thank-you';
+  const upgradeUrl = 'https://app.callbirdai.com/upgrade-required';
 
   return {
     to: email,
@@ -227,7 +227,7 @@ function getTrialExpiredEmail(clientData) {
       box-shadow: 0 4px 6px rgba(0,0,0,0.1);
     }
     .header {
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      background: linear-gradient(135deg, #122092 0%, #1a2bb0 100%);
       color: white;
       padding: 40px 30px;
       text-align: center;
@@ -242,7 +242,7 @@ function getTrialExpiredEmail(clientData) {
     }
     .alert-box {
       background: #fff3cd;
-      border: 2px solid #ffc107;
+      border: 2px solid #f6b828;
       border-radius: 8px;
       padding: 20px;
       margin: 30px 0;
@@ -260,7 +260,7 @@ function getTrialExpiredEmail(clientData) {
     }
     .cta-button {
       display: inline-block;
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      background: linear-gradient(135deg, #122092 0%, #1a2bb0 100%);
       color: white;
       text-decoration: none;
       padding: 16px 40px;
@@ -272,7 +272,7 @@ function getTrialExpiredEmail(clientData) {
     }
     .cta-button:hover {
       transform: translateY(-2px);
-      box-shadow: 0 6px 12px rgba(102, 126, 234, 0.4);
+      box-shadow: 0 6px 12px rgba(18, 32, 146, 0.4);
     }
     .phone-number {
       background: #f8f9fa;
@@ -281,7 +281,7 @@ function getTrialExpiredEmail(clientData) {
       font-family: 'Courier New', monospace;
       font-size: 18px;
       font-weight: bold;
-      color: #667eea;
+      color: #122092;
       margin: 20px 0;
       text-align: center;
     }
@@ -311,7 +311,7 @@ function getTrialExpiredEmail(clientData) {
       border-top: 1px solid #e9ecef;
     }
     .footer a {
-      color: #667eea;
+      color: #122092;
       text-decoration: none;
     }
   </style>
@@ -339,7 +339,7 @@ function getTrialExpiredEmail(clientData) {
       </p>
 
       <div class="phone-number">
-        ${phone_number || ''}
+        ${phone_number || 'Check your dashboard'}
       </div>
 
       <p style="font-size: 18px; color: #333; font-weight: 600; margin: 30px 0 20px 0;">
@@ -348,7 +348,7 @@ function getTrialExpiredEmail(clientData) {
 
       <div class="pricing-info">
         <h3>Plans Starting at $49/month</h3>
-        <p><strong>Starter:</strong> $49/mo (50 calls) • <strong>Professional:</strong> $99/mo (250 calls) • <strong>Enterprise:</strong> $199/mo (500 calls)</p>
+        <p><strong>Starter:</strong> $49/mo (50 calls) • <strong>Professional:</strong> $99/mo (300 calls) • <strong>Enterprise:</strong> $197/mo (Unlimited)</p>
       </div>
 
       <div style="text-align: center;">
@@ -358,7 +358,7 @@ function getTrialExpiredEmail(clientData) {
       </div>
 
       <p style="font-size: 14px; color: #666; margin-top: 40px; text-align: center; border-top: 1px solid #e9ecef; padding-top: 20px;">
-        Need help deciding? Text us: <strong><a href="sms:+15055573160" style="color: #667eea; text-decoration: none;">(505) 557-3160</a></strong>
+        Need help deciding? Text us: <strong><a href="sms:+15055573160" style="color: #122092; text-decoration: none;">(505) 557-3160</a></strong>
       </p>
     </div>
 
@@ -381,12 +381,12 @@ function getPaymentConfirmationEmail(clientData) {
   const planNames = {
     'starter': 'Starter ($49/month)',
     'professional': 'Professional ($99/month)',
-    'enterprise': 'Enterprise ($199/month)'
+    'enterprise': 'Enterprise ($197/month)'
   };
 
   return {
     to: email,
-    subject: `Welcome to CallBird! Your ${plan_type || 'subscription'} is active`,
+    subject: `Welcome to CallBird! Your ${planNames[plan_type] || 'subscription'} is active`,
     html: `
 <!DOCTYPE html>
 <html>
@@ -444,7 +444,7 @@ function getPaymentConfirmationEmail(clientData) {
     }
     .info-box h4 {
       margin-top: 0;
-      color: #667eea;
+      color: #122092;
     }
     .info-row {
       display: flex;
@@ -465,7 +465,7 @@ function getPaymentConfirmationEmail(clientData) {
     }
     .cta-button {
       display: inline-block;
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      background: linear-gradient(135deg, #122092 0%, #1a2bb0 100%);
       color: white;
       padding: 16px 40px;
       text-decoration: none;
@@ -473,17 +473,18 @@ function getPaymentConfirmationEmail(clientData) {
       font-size: 18px;
       font-weight: 600;
       margin: 25px 0;
-      box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+      box-shadow: 0 4px 15px rgba(18, 32, 146, 0.4);
     }
     .next-steps {
-      background: #fff3cd;
+      background: #e7f3ff;
       padding: 25px;
       border-radius: 8px;
       margin: 25px 0;
+      border-left: 4px solid #122092;
     }
     .next-steps h3 {
       margin-top: 0;
-      color: #856404;
+      color: #122092;
     }
     .next-steps ol {
       margin: 0;
@@ -502,7 +503,7 @@ function getPaymentConfirmationEmail(clientData) {
       border-top: 1px solid #e9ecef;
     }
     .footer a {
-      color: #667eea;
+      color: #122092;
       text-decoration: none;
     }
   </style>
@@ -562,7 +563,7 @@ function getPaymentConfirmationEmail(clientData) {
       </p>
 
       <p style="font-size: 14px; color: #666; margin-top: 30px;">
-        Questions? We're here to help! Text us at <strong><a href="sms:+15055573160" style="color: #667eea; text-decoration: none;">(505) 557-3160</a></strong> or reply to this email.
+        Questions? We're here to help! Text us at <strong><a href="sms:+15055573160" style="color: #122092; text-decoration: none;">(505) 557-3160</a></strong> or reply to this email.
       </p>
     </div>
 
