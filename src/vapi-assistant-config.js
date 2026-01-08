@@ -22,7 +22,7 @@ const INDUSTRY_MAPPING = {
 const VOICES = {
   male_professional: '29vD33N1CtxCmqQRPOHJ',
   female_warm: '21m00Tcm4TlvDq8ikWAM',
-  male_adam: 'jBzLvP03992lMFEkj2kJ',
+  male_adam: 'PrmfKloobWGGLoyMJEHx',
   female_soft: 'EXAVITQu4vr4xnSDxMaL'
 };
 
@@ -747,13 +747,13 @@ async function createQueryTool(fileId, businessName, vapiApiKey) {
 // ====================================================================
 // CONFIGURATION BUILDER (✅ UPDATED - NO ANALYSISPLAN + NAME SANITIZATION)
 // ====================================================================
-function getIndustryConfig(industryFromGHL, businessName, queryToolId = null, ownerPhone = null) {
+function getIndustryConfig(industryFromGHL, businessName, queryToolId = null, ownerPhone = null, clientId = null, calendarEnabled = false) {
   const industryKey = INDUSTRY_MAPPING[industryFromGHL] || 'professional_services';
   const config = INDUSTRY_CONFIGS[industryKey];
 
   if (!config) {
     console.error(`⚠️ Unknown industry: ${industryFromGHL}, using professional_services`);
-    return getIndustryConfig('Professional Services (legal, accounting)', businessName, queryToolId, ownerPhone);
+    return getIndustryConfig('Professional Services (legal, accounting)', businessName, queryToolId, ownerPhone, clientId, calendarEnabled);
   }
 
   // Build tools array (only for non-function tools like transferCall)
@@ -780,6 +780,51 @@ function getIndustryConfig(industryFromGHL, businessName, queryToolId = null, ow
         }
       ]
     });
+  }
+
+  // Add Calendar Tools if enabled
+  if (calendarEnabled && clientId) {
+    const backendUrl = process.env.BACKEND_URL || 'https://api.callbirdai.com';
+    tools.push(
+      {
+        type: 'function',
+        function: {
+          name: 'check_availability',
+          description: 'Check available appointment times for a specific date. Use this when a customer wants to book an appointment.',
+          parameters: {
+            type: 'object',
+            properties: {
+              date: { type: 'string', description: 'Date to check in YYYY-MM-DD format' }
+            },
+            required: ['date']
+          }
+        },
+        server: { url: `${backendUrl}/api/calendar/availability/${clientId}` },
+        async: false
+      },
+      {
+        type: 'function',
+        function: {
+          name: 'book_appointment',
+          description: 'Book an appointment after confirming availability and collecting customer details.',
+          parameters: {
+            type: 'object',
+            properties: {
+              customer_name: { type: 'string', description: 'Full name of the customer' },
+              customer_phone: { type: 'string', description: 'Customer phone number' },
+              date: { type: 'string', description: 'Appointment date in YYYY-MM-DD format' },
+              time: { type: 'string', description: 'Appointment time (e.g., 2:00 PM)' },
+              service_type: { type: 'string', description: 'Type of service' },
+              notes: { type: 'string', description: 'Any special notes' }
+            },
+            required: ['customer_name', 'customer_phone', 'date', 'time']
+          }
+        },
+        server: { url: `${backendUrl}/api/calendar/book/${clientId}` },
+        async: false
+      }
+    );
+    console.log(`📅 Calendar tools added for client: ${clientId}`);
   }
 
   return {
@@ -925,3 +970,82 @@ module.exports = {
   INDUSTRY_MAPPING,
   sanitizeAssistantName
 };
+// ====================================================================
+// CALENDAR BOOKING TOOL CONFIGURATION
+// ====================================================================
+function getCalendarTools(clientId, backendUrl) {
+  return [
+    {
+      type: 'function',
+      function: {
+        name: 'check_availability',
+        description: 'Check available appointment times for a specific date. Use this when a customer wants to book an appointment.',
+        parameters: {
+          type: 'object',
+          properties: {
+            date: {
+              type: 'string',
+              description: 'Date to check in YYYY-MM-DD format (e.g., 2026-01-15)'
+            }
+          },
+          required: ['date']
+        }
+      },
+      server: {
+        url: `${backendUrl}/api/calendar/availability`,
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      },
+      async: false
+    },
+    {
+      type: 'function', 
+      function: {
+        name: 'book_appointment',
+        description: 'Book an appointment after confirming availability and collecting customer details.',
+        parameters: {
+          type: 'object',
+          properties: {
+            customer_name: {
+              type: 'string',
+              description: 'Full name of the customer'
+            },
+            customer_phone: {
+              type: 'string', 
+              description: 'Customer phone number'
+            },
+            date: {
+              type: 'string',
+              description: 'Appointment date in YYYY-MM-DD format'
+            },
+            time: {
+              type: 'string',
+              description: 'Appointment time (e.g., "2:00 PM")'
+            },
+            service_type: {
+              type: 'string',
+              description: 'Type of service or reason for appointment'
+            },
+            notes: {
+              type: 'string',
+              description: 'Any special requests or notes'
+            }
+          },
+          required: ['customer_name', 'customer_phone', 'date', 'time']
+        }
+      },
+      server: {
+        url: `${backendUrl}/api/calendar/book`,
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      },
+      async: false
+    }
+  ];
+}
+
+module.exports.getCalendarTools = getCalendarTools;

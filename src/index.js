@@ -70,6 +70,12 @@ app.use('/webhook/vapi', demoWebhook);
 app.post('/api/knowledge-base/update', updateKnowledgeBase);
 
 // ============================================
+// 🆕 CALENDAR BOOKING - VAPI TOOL
+// ============================================
+const calendarRoutes = require('./routes/calendar');
+app.use('/api/calendar', calendarRoutes);
+
+// ============================================
 // CRON JOB ENDPOINTS - TRIAL MANAGEMENT
 // ============================================
 app.post('/api/cron/check-trials', async (req, res) => {
