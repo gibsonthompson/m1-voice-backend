@@ -31,12 +31,13 @@ async function sendUsageWarningEmail(client, currentCalls, limit) {
             </div>
             <p><strong>Upgrade to avoid service interruption:</strong></p>
             <ul>
-              <li><strong>Growth:</strong> $79/month - 500 calls</li>
-              <li><strong>Pro:</strong> $199/month - 2000 calls</li>
+              <li><strong>Starter:</strong> $49/month - 50 calls</li>
+              <li><strong>Professional:</strong> $99/month - 300 calls</li>
+              <li><strong>Enterprise:</strong> $197/month - Unlimited calls</li>
             </ul>
             <div style="text-align: center; margin: 30px 0;">
-              <a href="https://callbird-dashboard.vercel.app/billing" 
-                 style="background: #111D96; color: white; padding: 12px 32px; text-decoration: none; border-radius: 6px; display: inline-block; font-weight: bold;">
+              <a href="https://app.callbirdai.com/upgrade-required" 
+                 style="background: #122092; color: white; padding: 12px 32px; text-decoration: none; border-radius: 6px; display: inline-block; font-weight: bold;">
                 Upgrade Plan
               </a>
             </div>
@@ -81,11 +82,12 @@ async function sendLimitReachedEmail(client, limit) {
             </div>
             <p><strong>Upgrade now to resume service:</strong></p>
             <ul>
-              <li><strong>Growth:</strong> $79/month - 500 calls</li>
-              <li><strong>Pro:</strong> $199/month - 2000 calls</li>
+              <li><strong>Starter:</strong> $49/month - 50 calls</li>
+              <li><strong>Professional:</strong> $99/month - 300 calls</li>
+              <li><strong>Enterprise:</strong> $197/month - Unlimited calls</li>
             </ul>
             <div style="text-align: center; margin: 30px 0;">
-              <a href="https://callbird-dashboard.vercel.app/billing" 
+              <a href="https://app.callbirdai.com/upgrade-required" 
                  style="background: #dc2626; color: white; padding: 14px 36px; text-decoration: none; border-radius: 6px; display: inline-block; font-weight: bold; font-size: 16px;">
                 Upgrade Now
               </a>
@@ -538,6 +540,31 @@ async function handleVapiWebhook(req, res) {
       }
       
       console.log('✅ Client found:', client.business_name);
+      
+      // ============================================
+      // 🆕 CHECK SUBSCRIPTION STATUS BEFORE PROCESSING
+      // ============================================
+      const validStatuses = ['active', 'trial'];
+      const subscriptionStatus = client.subscription_status;
+      
+      console.log(`📋 Subscription status: ${subscriptionStatus}`);
+      
+      if (!validStatuses.includes(subscriptionStatus)) {
+        console.log(`🚫 CALL BLOCKED: ${client.business_name} subscription not active`);
+        console.log(`   Status: ${subscriptionStatus}`);
+        console.log(`   Valid statuses: ${validStatuses.join(', ')}`);
+        
+        // Return success to VAPI but don't process the call
+        return res.status(200).json({ 
+          received: true,
+          blocked: true,
+          reason: 'Subscription not active',
+          subscriptionStatus: subscriptionStatus,
+          message: `Client ${client.business_name} has subscription status: ${subscriptionStatus}. Must be 'active' or 'trial' to process calls.`
+        });
+      }
+      
+      console.log(`✅ Subscription valid: ${subscriptionStatus}`);
       
       // ============================================
       // CHECK CALL LIMITS BEFORE PROCESSING
