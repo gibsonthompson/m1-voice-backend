@@ -215,3 +215,28 @@ app.listen(PORT, '0.0.0.0', () => {
 });
 
 module.exports = app;
+// ============================================
+// 🆕 UPDATE ASSISTANT CALENDAR - Called when user connects/disconnects calendar
+// ============================================
+const { updateAssistantCalendar } = require('./vapi-assistant-config');
+
+app.post('/api/assistant/update-calendar', async (req, res) => {
+  try {
+    const { assistantId, clientId, enabled } = req.body;
+    
+    if (!assistantId || !clientId) {
+      return res.status(400).json({ error: 'Missing assistantId or clientId' });
+    }
+
+    const success = await updateAssistantCalendar(assistantId, clientId, enabled);
+    
+    if (success) {
+      res.json({ success: true, message: `Calendar ${enabled ? 'enabled' : 'disabled'}` });
+    } else {
+      res.status(500).json({ error: 'Failed to update assistant' });
+    }
+  } catch (error) {
+    console.error('Update calendar error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});

@@ -1050,3 +1050,124 @@ function getCalendarTools(clientId, backendUrl) {
 }
 
 module.exports.getCalendarTools = getCalendarTools;
+
+// ====================================================================
+// UPDATE ASSISTANT WITH CALENDAR TOOLS
+// ====================================================================
+async function updateAssistantCalendar(assistantId, clientId, enabled) {
+  try {
+    console.log(`📅 ${enabled ? 'Enabling' : 'Disabling'} calendar for assistant: ${assistantId}`);
+    
+    // Get current assistant config
+    const getResponse = await fetch(`https://api.vapi.ai/assistant/${assistantId}`, {
+      headers: {
+        'Authorization': `Bearer ${process.env.VAPI_API_KEY}`
+      }
+    });
+
+    if (!getResponse.ok) {
+      throw new Error(`Failed to get assistant: ${await getResponse.text()}`);
+    }
+
+    const assistant = await getResponse.json();
+    const backendUrl = process.env.BACKEND_URL || 'https://api.callbirdai.com';
+    
+    // Get existing tools (non-calendar)
+    let tools = (assistant.model?.tools || []).filter(t => 
+      t.function?.name !== 'check_availability' && 
+      t.function?.name !== 'book_appointment'
+    );
+
+    // Add calendar tools if enabling
+    if (enabled) {
+      tools.push(
+        {
+          type: 'function',
+          function: {
+            name: 'check_availability',
+            description: 'Check available appointment times for a specific date. Use this when a customer wants to book an appointment.',
+            parameters: {
+              type: 'object',
+              properties: {
+                date: { type: 'string', description: 'Date to check in YYYY-MM-DD format' }
+              },
+              required: ['date']
+            }
+          },
+          server: { url: `${backendUrl}/api/calendar/availability/${clientId}` },
+          async: false
+        },
+        {
+          type: 'function',
+          function: {
+            name: 'book_appointment',
+            description: 'Book an appointment after confirming availability and collecting customer details.',
+            parameters: {
+              type: 'object',
+              properties: {
+                customer_name: { type: 'string', description: 'Full name of the customer' },
+                customer_phone: { type: 'string', description: 'Customer phone number' },
+                date: { type: 'string', description: 'Appointment date in YYYY-MM-DD format' },
+                time: { type: 'string', description: 'Appointment time (e.g., 2:00 PM)' },
+                service_type: { type: 'string', description: 'Type of service' },
+                notes: { type: 'string', description: 'Any special notes' }
+              },
+              required: ['customer_name', 'customer_phone', 'date', 'time']
+            }
+          },
+          server: { url: `${backendUrl}/api/calendar/book/${clientId}` },
+          async: false
+        }
+      );
+    }
+
+    // Update system prompt
+    let systemPrompt = assistant.model?.messages?.[0]?.content || '';
+    const calendarInstructions = `
+
+## APPOINTMENT BOOKING
+You can book appointments directly to the business calendar.
+1. When a customer wants to book, ask for their preferred date
+2. Use check_availability to see available times for that date
+3. Tell them the available slots and let them pick
+4. Collect: name, phone number, service type
+5. Use book_appointment to confirm the booking
+6. Confirm the details back to them
+
+If no slots are available, offer alternative dates or take their info for a callback.`;
+
+    if (enabled && !systemPrompt.includes('APPOINTMENT BOOKING')) {
+      systemPrompt += calendarInstructions;
+    } else if (!enabled) {
+      systemPrompt = systemPrompt.replace(calendarInstructions, '');
+    }
+
+    // Update assistant
+    const updateResponse = await fetch(`https://api.vapi.ai/assistant/${assistantId}`, {
+      method: 'PATCH',
+      headers: {
+        'Authorization': `Bearer ${process.env.VAPI_API_KEY}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        model: {
+          ...assistant.model,
+          tools: tools.length > 0 ? tools : undefined,
+          messages: [{ role: 'system', content: systemPrompt }]
+        }
+      })
+    });
+
+    if (!updateResponse.ok) {
+      throw new Error(`Failed to update assistant: ${await updateResponse.text()}`);
+    }
+
+    console.log(`✅ Calendar ${enabled ? 'enabled' : 'disabled'} for assistant: ${assistantId}`);
+    return true;
+  } catch (error) {
+    console.error('❌ Error updating assistant calendar:', error);
+    return false;
+  }
+}
+
+module.exports.updateAssistantCalendar = updateAssistantCalendar;
