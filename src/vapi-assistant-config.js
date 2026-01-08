@@ -853,7 +853,7 @@ function getIndustryConfig(industryFromGHL, businessName, queryToolId = null, ow
 // ====================================================================
 // VAPI ASSISTANT MANAGEMENT
 // ====================================================================
-async function createIndustryAssistant(businessName, industry, knowledgeBaseData = null, ownerPhone = null, serverUrl = null) {
+async function createIndustryAssistant(businessName, industry, knowledgeBaseData = null, ownerPhone = null, serverUrl = null, clientId = null, calendarEnabled = false) {
   try {
     console.log(`🎯 Creating ${industry} assistant for ${businessName}`);
 
@@ -868,7 +868,7 @@ async function createIndustryAssistant(businessName, industry, knowledgeBaseData
       }
     }
 
-    const config = getIndustryConfig(industry, businessName, queryToolId, ownerPhone);
+    const config = getIndustryConfig(industry, businessName, queryToolId, ownerPhone, clientId, calendarEnabled);
     config.serverUrl = serverUrl || process.env.BACKEND_URL + '/webhook/vapi';
 
     console.log(`📝 Industry: ${INDUSTRY_MAPPING[industry] || 'default'}`);
@@ -879,6 +879,7 @@ async function createIndustryAssistant(businessName, industry, knowledgeBaseData
     if (knowledgeBaseData) console.log(`📚 Knowledge Base: ${knowledgeBaseData.knowledgeBaseId}`);
     if (queryToolId) console.log(`🔧 Query Tool: ${queryToolId}`);
     if (ownerPhone) console.log(`📞 Transfer enabled to: ${ownerPhone}`);
+    if (calendarEnabled) console.log(`📅 Calendar booking enabled for client: ${clientId}`);
 
     const response = await fetch('https://api.vapi.ai/assistant', {
       method: 'POST',
