@@ -62,7 +62,6 @@ async function refreshAccessToken(client) {
 
 // Parse time string to 24hr format
 function parseTimeTo24Hr(timeStr) {
-  // Handle various formats: "1:00 PM", "1 PM", "13:00", "1pm"
   const normalized = timeStr.trim().toLowerCase();
   
   // Already 24hr format
@@ -122,26 +121,37 @@ async function getAvailableSlots(clientId, date) {
     // Get existing events
     const calendarId = client.google_calendar_id || 'primary';
     const timezone = client.timezone || 'America/New_York';
-    const startOfDay = `${date}T00:00:00`;
-    const endOfDay = `${date}T23:59:59`;
+    
+    // Use timezone-aware date range
+    const timeMin = new Date(`${date}T00:00:00`).toISOString();
+    const timeMax = new Date(`${date}T23:59:59`).toISOString();
 
     const eventsResponse = await fetch(
       `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events?` +
       new URLSearchParams({
-        timeMin: new Date(startOfDay).toISOString(),
-        timeMax: new Date(endOfDay).toISOString(),
+        timeMin,
+        timeMax,
         singleEvents: 'true',
         orderBy: 'startTime',
-        timeZone: timezone,
       }),
       { headers: { Authorization: `Bearer ${accessToken}` } }
     );
 
     const eventsData = await eventsResponse.json();
-    const busyTimes = (eventsData.items || []).map(event => ({
-      start: new Date(event.start.dateTime || event.start.date),
-      end: new Date(event.end.dateTime || event.end.date),
-    }));
+    
+    // Extract busy time ranges in minutes from midnight for easier comparison
+    const busyRanges = (eventsData.items || []).map(event => {
+      const start = new Date(event.start.dateTime || event.start.date);
+      const end = new Date(event.end.dateTime || event.end.date);
+      
+      // Convert to minutes from midnight in local time
+      const startMinutes = start.getHours() * 60 + start.getMinutes();
+      const endMinutes = end.getHours() * 60 + end.getMinutes();
+      
+      console.log(`📅 Busy: ${start.toLocaleTimeString()} - ${end.toLocaleTimeString()} (${startMinutes}-${endMinutes} mins)`);
+      
+      return { startMinutes, endMinutes };
+    });
 
     // Generate available slots
     const duration = client.appointment_duration || 30;
@@ -151,36 +161,34 @@ async function getAvailableSlots(clientId, date) {
     const [openHr, openMin] = hours.open.split(':').map(Number);
     const [closeHr, closeMin] = hours.close.split(':').map(Number);
     
-    let currentHr = openHr;
-    let currentMin = openMin;
+    let currentMinutes = openHr * 60 + openMin;
+    const closeMinutes = closeHr * 60 + closeMin;
 
-    while (currentHr < closeHr || (currentHr === closeHr && currentMin + duration <= closeMin)) {
-      const slotStart = `${date}T${currentHr.toString().padStart(2, '0')}:${currentMin.toString().padStart(2, '0')}:00`;
-      const slotStartDate = new Date(slotStart);
-      const slotEndDate = new Date(slotStartDate.getTime() + duration * 60000);
+    while (currentMinutes + duration <= closeMinutes) {
+      const slotEndMinutes = currentMinutes + duration;
       
-      const hasConflict = busyTimes.some(busy =>
-        (slotStartDate >= busy.start && slotStartDate < busy.end) ||
-        (slotEndDate > busy.start && slotEndDate <= busy.end) ||
-        (slotStartDate <= busy.start && slotEndDate >= busy.end)
+      // Check for conflicts
+      const hasConflict = busyRanges.some(busy =>
+        (currentMinutes >= busy.startMinutes && currentMinutes < busy.endMinutes) ||
+        (slotEndMinutes > busy.startMinutes && slotEndMinutes <= busy.endMinutes) ||
+        (currentMinutes <= busy.startMinutes && slotEndMinutes >= busy.endMinutes)
       );
 
       if (!hasConflict) {
         // Format as readable time
-        const hour12 = currentHr > 12 ? currentHr - 12 : (currentHr === 0 ? 12 : currentHr);
-        const ampm = currentHr >= 12 ? 'PM' : 'AM';
-        const minStr = currentMin === 0 ? '' : `:${currentMin.toString().padStart(2, '0')}`;
+        const hr = Math.floor(currentMinutes / 60);
+        const min = currentMinutes % 60;
+        const hour12 = hr > 12 ? hr - 12 : (hr === 0 ? 12 : hr);
+        const ampm = hr >= 12 ? 'PM' : 'AM';
+        const minStr = min === 0 ? '' : `:${min.toString().padStart(2, '0')}`;
         slots.push(`${hour12}${minStr} ${ampm}`);
       }
 
       // Increment by 30 minutes
-      currentMin += 30;
-      if (currentMin >= 60) {
-        currentMin = 0;
-        currentHr++;
-      }
+      currentMinutes += 30;
     }
 
+    console.log(`📅 Available slots for ${date}: ${slots.length} slots`);
     return { success: true, slots, date };
   } catch (err) {
     console.error('Get slots error:', err);
@@ -224,13 +232,13 @@ async function bookAppointment(clientId, customerName, customerPhone, date, time
     const duration = client.appointment_duration || 30;
     const timezone = client.timezone || 'America/New_York';
 
-    // Build ISO string with explicit time (no timezone conversion issues)
+    // Build ISO string with explicit time
     const startDateTime = `${date}T${time24}:00`;
-    const endHr = parseInt(time24.split(':')[0], 10);
-    const endMin = parseInt(time24.split(':')[1], 10) + duration;
-    const endHrFinal = endHr + Math.floor(endMin / 60);
-    const endMinFinal = endMin % 60;
-    const endDateTime = `${date}T${endHrFinal.toString().padStart(2, '0')}:${endMinFinal.toString().padStart(2, '0')}:00`;
+    const [hr, min] = time24.split(':').map(Number);
+    const totalMinutes = hr * 60 + min + duration;
+    const endHr = Math.floor(totalMinutes / 60);
+    const endMin = totalMinutes % 60;
+    const endDateTime = `${date}T${endHr.toString().padStart(2, '0')}:${endMin.toString().padStart(2, '0')}:00`;
 
     console.log(`📅 Event time: ${startDateTime} to ${endDateTime} (${timezone})`);
 
@@ -298,7 +306,6 @@ async function bookAppointment(clientId, customerName, customerPhone, date, time
     });
 
     // Format time for confirmation
-    const [hr, min] = time24.split(':').map(Number);
     const hr12 = hr > 12 ? hr - 12 : (hr === 0 ? 12 : hr);
     const ampm = hr >= 12 ? 'PM' : 'AM';
     const formattedTime = min === 0 ? `${hr12} ${ampm}` : `${hr12}:${min.toString().padStart(2, '0')} ${ampm}`;
