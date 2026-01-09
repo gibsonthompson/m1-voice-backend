@@ -15,7 +15,8 @@ const {
 const routes = require('./routes');
 const vapiWebhook = require('./webhooks');
 const { runTrialManager } = require('./cron/trial-manager');
-const { updateKnowledgeBase } = require('./knowledge-base'); // 🆕 ADD THIS
+const { updateKnowledgeBase } = require('./knowledge-base');
+const { updateAssistantCalendar } = require('./vapi-assistant-config');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -74,6 +75,30 @@ app.post('/api/knowledge-base/update', updateKnowledgeBase);
 // ============================================
 const calendarRoutes = require('./routes/calendar');
 app.use('/api/calendar', calendarRoutes);
+
+// ============================================
+// �� UPDATE ASSISTANT CALENDAR
+// ============================================
+app.post('/api/assistant/update-calendar', async (req, res) => {
+  try {
+    const { assistantId, clientId, enabled } = req.body;
+    
+    if (!assistantId || !clientId) {
+      return res.status(400).json({ error: 'Missing assistantId or clientId' });
+    }
+
+    const success = await updateAssistantCalendar(assistantId, clientId, enabled);
+    
+    if (success) {
+      res.json({ success: true, message: `Calendar ${enabled ? 'enabled' : 'disabled'}` });
+    } else {
+      res.status(500).json({ error: 'Failed to update assistant' });
+    }
+  } catch (error) {
+    console.error('Update calendar error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
 
 // ============================================
 // CRON JOB ENDPOINTS - TRIAL MANAGEMENT
@@ -141,9 +166,11 @@ app.get('/', (req, res) => {
     environment: process.env.NODE_ENV || 'development',
     routes: {
       vapi: '/webhook/vapi',
-      vapiDemo: '/webhook/vapi/demo-trial-signup', // 🆕 ADDED
+      vapiDemo: '/webhook/vapi/demo-trial-signup',
       stripe: '/api/webhooks/stripe',
-      knowledgeBase: '/api/knowledge-base/update', // 🆕 ADD THIS
+      knowledgeBase: '/api/knowledge-base/update',
+      calendar: '/api/calendar/*',
+      assistantCalendar: '/api/assistant/update-calendar',
       cron: '/api/cron/check-trials',
       admin: '/api/admin/trigger-trial-check',
       api: '/api/*'
@@ -190,7 +217,7 @@ app.use((req, res) => {
 // START SERVER
 // ============================================
 app.listen(PORT, '0.0.0.0', () => {
-  console.log(`🚀 Server running on port ${PORT}`);
+  console.log(`�� Server running on port ${PORT}`);
   console.log(`📅 Started at: ${new Date().toISOString()}`);
   console.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
   console.log(`\n✅ Service Status:`);
@@ -206,37 +233,13 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log(`   Signups: 3 req/hour per IP`);
   console.log(`\n📍 Critical Routes:`);
   console.log(`   POST /webhook/vapi - VAPI call webhooks`);
-  console.log(`   POST /webhook/vapi/demo-trial-signup - Demo trial signups`); // 🆕 ADDED
+  console.log(`   POST /webhook/vapi/demo-trial-signup - Demo trial signups`);
   console.log(`   POST /api/webhooks/stripe - Stripe payment webhooks`);
   console.log(`   POST /api/webhooks/ghl-signup - GoHighLevel signups`);
-  console.log(`   POST /api/knowledge-base/update - Knowledge base updates`); // 🆕 ADD THIS
+  console.log(`   POST /api/knowledge-base/update - Knowledge base updates`);
+  console.log(`   POST /api/assistant/update-calendar - Calendar assistant updates`);
   console.log(`   POST /api/cron/check-trials - Automated trial checks`);
   console.log(`   POST /api/admin/trigger-trial-check - Manual trial check`);
 });
 
 module.exports = app;
-// ============================================
-// 🆕 UPDATE ASSISTANT CALENDAR - Called when user connects/disconnects calendar
-// ============================================
-const { updateAssistantCalendar } = require('./vapi-assistant-config');
-
-app.post('/api/assistant/update-calendar', async (req, res) => {
-  try {
-    const { assistantId, clientId, enabled } = req.body;
-    
-    if (!assistantId || !clientId) {
-      return res.status(400).json({ error: 'Missing assistantId or clientId' });
-    }
-
-    const success = await updateAssistantCalendar(assistantId, clientId, enabled);
-    
-    if (success) {
-      res.json({ success: true, message: `Calendar ${enabled ? 'enabled' : 'disabled'}` });
-    } else {
-      res.status(500).json({ error: 'Failed to update assistant' });
-    }
-  } catch (error) {
-    console.error('Update calendar error:', error);
-    res.status(500).json({ error: 'Server error' });
-  }
-});
