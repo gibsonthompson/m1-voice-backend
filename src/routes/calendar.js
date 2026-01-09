@@ -8,7 +8,6 @@ router.post('/availability/:clientId', async (req, res) => {
     const { clientId } = req.params;
     const { message } = req.body;
     
-    // Extract from VAPI tool call
     const toolCall = message?.toolCallList?.[0] || message?.toolCalls?.[0];
     const toolCallId = toolCall?.id;
     const args = toolCall?.arguments || toolCall?.function?.arguments;
@@ -36,14 +35,30 @@ router.post('/availability/:clientId', async (req, res) => {
 
     if (result.slots.length === 0) {
       return res.json({ 
-        results: [{ toolCallId, result: `No availability on ${date}. ${result.message || 'Would you like to try another date?'}` }] 
+        results: [{ toolCallId, result: `No availability on ${date}. Would you like to try another date?` }] 
       });
+    }
+
+    // Suggest just a few slots (morning, midday, afternoon if available)
+    const slots = result.slots;
+    let suggested = [];
+    
+    if (slots.length <= 4) {
+      suggested = slots;
+    } else {
+      // Pick morning (first), midday (middle), and afternoon (last few)
+      suggested.push(slots[0]); // First available (morning)
+      suggested.push(slots[Math.floor(slots.length / 2)]); // Midday
+      suggested.push(slots[Math.floor(slots.length * 0.75)]); // Afternoon
+      if (slots.length > 10) {
+        suggested.push(slots[slots.length - 2]); // Late afternoon
+      }
     }
 
     return res.json({ 
       results: [{ 
         toolCallId,
-        result: `Available times on ${date}: ${result.slots.join(', ')}. Which time works best for you?` 
+        result: `I have openings at ${suggested.join(', ')}. Which works best for you? I also have other times if none of those work.`
       }] 
     });
 

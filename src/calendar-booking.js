@@ -60,6 +60,29 @@ async function refreshAccessToken(client) {
   }
 }
 
+// Parse time string to 24hr format
+function parseTimeTo24Hr(timeStr) {
+  // Handle various formats: "1:00 PM", "1 PM", "13:00", "1pm"
+  const normalized = timeStr.trim().toLowerCase();
+  
+  // Already 24hr format
+  if (/^\d{1,2}:\d{2}$/.test(normalized) && !normalized.includes('m')) {
+    return normalized.padStart(5, '0');
+  }
+  
+  const match = normalized.match(/(\d{1,2})(?::(\d{2}))?\s*(am|pm)?/i);
+  if (!match) return null;
+  
+  let hours = parseInt(match[1], 10);
+  const minutes = match[2] ? parseInt(match[2], 10) : 0;
+  const period = match[3]?.toLowerCase();
+  
+  if (period === 'pm' && hours !== 12) hours += 12;
+  if (period === 'am' && hours === 12) hours = 0;
+  
+  return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+}
+
 // Get available time slots
 async function getAvailableSlots(clientId, date) {
   try {
@@ -89,7 +112,7 @@ async function getAvailableSlots(clientId, date) {
     };
 
     const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
-    const dayOfWeek = dayNames[new Date(date).getDay()];
+    const dayOfWeek = dayNames[new Date(date + 'T12:00:00').getDay()];
     const hours = businessHours[dayOfWeek];
 
     if (!hours || !hours.open || !hours.close) {
@@ -98,16 +121,18 @@ async function getAvailableSlots(clientId, date) {
 
     // Get existing events
     const calendarId = client.google_calendar_id || 'primary';
-    const startOfDay = `${date}T00:00:00Z`;
-    const endOfDay = `${date}T23:59:59Z`;
+    const timezone = client.timezone || 'America/New_York';
+    const startOfDay = `${date}T00:00:00`;
+    const endOfDay = `${date}T23:59:59`;
 
     const eventsResponse = await fetch(
       `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events?` +
       new URLSearchParams({
-        timeMin: startOfDay,
-        timeMax: endOfDay,
+        timeMin: new Date(startOfDay).toISOString(),
+        timeMax: new Date(endOfDay).toISOString(),
         singleEvents: 'true',
         orderBy: 'startTime',
+        timeZone: timezone,
       }),
       { headers: { Authorization: `Bearer ${accessToken}` } }
     );
@@ -121,27 +146,39 @@ async function getAvailableSlots(clientId, date) {
     // Generate available slots
     const duration = client.appointment_duration || 30;
     const slots = [];
-    let currentTime = new Date(`${date}T${hours.open}:00`);
-    const closeTime = new Date(`${date}T${hours.close}:00`);
+    
+    // Parse business hours
+    const [openHr, openMin] = hours.open.split(':').map(Number);
+    const [closeHr, closeMin] = hours.close.split(':').map(Number);
+    
+    let currentHr = openHr;
+    let currentMin = openMin;
 
-    while (currentTime.getTime() + duration * 60000 <= closeTime.getTime()) {
-      const slotEnd = new Date(currentTime.getTime() + duration * 60000);
+    while (currentHr < closeHr || (currentHr === closeHr && currentMin + duration <= closeMin)) {
+      const slotStart = `${date}T${currentHr.toString().padStart(2, '0')}:${currentMin.toString().padStart(2, '0')}:00`;
+      const slotStartDate = new Date(slotStart);
+      const slotEndDate = new Date(slotStartDate.getTime() + duration * 60000);
       
       const hasConflict = busyTimes.some(busy =>
-        (currentTime >= busy.start && currentTime < busy.end) ||
-        (slotEnd > busy.start && slotEnd <= busy.end) ||
-        (currentTime <= busy.start && slotEnd >= busy.end)
+        (slotStartDate >= busy.start && slotStartDate < busy.end) ||
+        (slotEndDate > busy.start && slotEndDate <= busy.end) ||
+        (slotStartDate <= busy.start && slotEndDate >= busy.end)
       );
 
       if (!hasConflict) {
-        slots.push(currentTime.toLocaleTimeString('en-US', {
-          hour: 'numeric',
-          minute: '2-digit',
-          hour12: true,
-        }));
+        // Format as readable time
+        const hour12 = currentHr > 12 ? currentHr - 12 : (currentHr === 0 ? 12 : currentHr);
+        const ampm = currentHr >= 12 ? 'PM' : 'AM';
+        const minStr = currentMin === 0 ? '' : `:${currentMin.toString().padStart(2, '0')}`;
+        slots.push(`${hour12}${minStr} ${ampm}`);
       }
 
-      currentTime = new Date(currentTime.getTime() + 30 * 60000);
+      // Increment by 30 minutes
+      currentMin += 30;
+      if (currentMin >= 60) {
+        currentMin = 0;
+        currentHr++;
+      }
     }
 
     return { success: true, slots, date };
@@ -175,25 +212,37 @@ async function bookAppointment(clientId, customerName, customerPhone, date, time
       return { success: false, error: 'Calendar authentication failed' };
     }
 
-    // Parse date and time
-    const appointmentDate = new Date(`${date} ${time}`);
-    if (isNaN(appointmentDate.getTime())) {
-      return { success: false, error: 'Invalid date or time format' };
+    // Parse time to 24hr format
+    const time24 = parseTimeTo24Hr(time);
+    if (!time24) {
+      console.error('Failed to parse time:', time);
+      return { success: false, error: 'Invalid time format' };
     }
+    
+    console.log(`📅 Parsed time: "${time}" -> "${time24}"`);
 
     const duration = client.appointment_duration || 30;
-    const endDate = new Date(appointmentDate.getTime() + duration * 60000);
     const timezone = client.timezone || 'America/New_York';
+
+    // Build ISO string with explicit time (no timezone conversion issues)
+    const startDateTime = `${date}T${time24}:00`;
+    const endHr = parseInt(time24.split(':')[0], 10);
+    const endMin = parseInt(time24.split(':')[1], 10) + duration;
+    const endHrFinal = endHr + Math.floor(endMin / 60);
+    const endMinFinal = endMin % 60;
+    const endDateTime = `${date}T${endHrFinal.toString().padStart(2, '0')}:${endMinFinal.toString().padStart(2, '0')}:00`;
+
+    console.log(`📅 Event time: ${startDateTime} to ${endDateTime} (${timezone})`);
 
     const event = {
       summary: `${serviceType || 'Appointment'} - ${customerName}`,
       description: `Customer: ${customerName}\nPhone: ${customerPhone}\n${notes ? `Notes: ${notes}` : ''}\n\nBooked via CallBird AI`,
       start: {
-        dateTime: appointmentDate.toISOString(),
+        dateTime: startDateTime,
         timeZone: timezone,
       },
       end: {
-        dateTime: endDate.toISOString(),
+        dateTime: endDateTime,
         timeZone: timezone,
       },
       reminders: {
@@ -233,25 +282,33 @@ async function bookAppointment(clientId, customerName, customerPhone, date, time
       google_event_id: createdEvent.id,
       customer_name: customerName,
       customer_phone: customerPhone,
-      appointment_time: appointmentDate.toISOString(),
+      appointment_time: new Date(startDateTime).toISOString(),
       duration,
       service_type: serviceType,
       notes,
       status: 'confirmed',
     });
 
-    const formattedDate = appointmentDate.toLocaleDateString('en-US', {
+    // Format confirmation nicely
+    const dateObj = new Date(date + 'T12:00:00');
+    const formattedDate = dateObj.toLocaleDateString('en-US', {
       weekday: 'long',
       month: 'long',
       day: 'numeric'
     });
 
+    // Format time for confirmation
+    const [hr, min] = time24.split(':').map(Number);
+    const hr12 = hr > 12 ? hr - 12 : (hr === 0 ? 12 : hr);
+    const ampm = hr >= 12 ? 'PM' : 'AM';
+    const formattedTime = min === 0 ? `${hr12} ${ampm}` : `${hr12}:${min.toString().padStart(2, '0')} ${ampm}`;
+
     return {
       success: true,
-      message: `Appointment confirmed for ${customerName} on ${formattedDate} at ${time}`,
+      message: `Appointment confirmed for ${customerName} on ${formattedDate} at ${formattedTime}`,
       appointment: {
         date: formattedDate,
-        time,
+        time: formattedTime,
         service: serviceType
       }
     };
