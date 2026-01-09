@@ -18,9 +18,11 @@ async function updateAssistantCalendar(assistantId, clientId, enabled) {
     }
 
     const assistant = await getResponse.json();
+    console.log('📋 Current assistant model:', JSON.stringify(assistant.model, null, 2).slice(0, 500));
     
     // Get existing toolIds
     let existingToolIds = assistant.model?.toolIds || [];
+    console.log('📋 Existing toolIds:', existingToolIds);
     
     if (enabled) {
       // Create check_availability tool via VAPI API
@@ -122,7 +124,8 @@ async function updateAssistantCalendar(assistantId, clientId, enabled) {
       console.log(`✅ book_appointment tool created: ${bookingTool.id}`);
 
       // Add new tool IDs to existing ones
-      existingToolIds = [...existingToolIds, availabilityTool.id, bookingTool.id];
+      const newToolIds = [...existingToolIds, availabilityTool.id, bookingTool.id];
+      console.log('📋 New toolIds to set:', newToolIds);
       
       // Update system prompt with calendar instructions
       let systemPrompt = assistant.model?.messages?.[0]?.content || '';
@@ -143,6 +146,19 @@ If no slots are available, offer alternative dates or take their info for a call
         systemPrompt += calendarInstructions;
       }
 
+      // Build the update payload - VAPI requires provider and model to be included
+      const updatePayload = {
+        model: {
+          provider: assistant.model?.provider || 'openai',
+          model: assistant.model?.model || 'gpt-4o-mini',
+          temperature: assistant.model?.temperature,
+          toolIds: newToolIds,
+          messages: [{ role: 'system', content: systemPrompt }]
+        }
+      };
+      
+      console.log('📤 Sending PATCH with payload:', JSON.stringify(updatePayload, null, 2).slice(0, 1000));
+
       // Update assistant with new toolIds
       const updateResponse = await fetch(`https://api.vapi.ai/assistant/${assistantId}`, {
         method: 'PATCH',
@@ -150,17 +166,15 @@ If no slots are available, offer alternative dates or take their info for a call
           'Authorization': `Bearer ${process.env.VAPI_API_KEY}`,
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({
-          model: {
-            ...assistant.model,
-            toolIds: existingToolIds,
-            messages: [{ role: 'system', content: systemPrompt }]
-          }
-        })
+        body: JSON.stringify(updatePayload)
       });
 
+      const updateResult = await updateResponse.text();
+      console.log('📥 PATCH response status:', updateResponse.status);
+      console.log('📥 PATCH response:', updateResult.slice(0, 500));
+
       if (!updateResponse.ok) {
-        throw new Error(`Failed to update assistant: ${await updateResponse.text()}`);
+        throw new Error(`Failed to update assistant: ${updateResult}`);
       }
 
       console.log(`✅ Calendar enabled for assistant: ${assistantId}`);
@@ -193,7 +207,8 @@ If no slots are available, offer alternative dates or take their info for a call
         },
         body: JSON.stringify({
           model: {
-            ...assistant.model,
+            provider: assistant.model?.provider || 'openai',
+            model: assistant.model?.model || 'gpt-4o-mini',
             messages: [{ role: 'system', content: systemPrompt }]
           }
         })
