@@ -16,7 +16,7 @@ const routes = require('./routes');
 const vapiWebhook = require('./webhooks');
 const { runTrialManager } = require('./cron/trial-manager');
 const { updateKnowledgeBase } = require('./knowledge-base');
-const { updateAssistantCalendar } = require('./vapi-assistant-config');
+const { updateAssistantCalendar } = require('./calendar-tools');
 
 const app = express();
 const PORT = process.env.PORT || 3000;

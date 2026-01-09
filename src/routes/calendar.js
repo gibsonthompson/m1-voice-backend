@@ -8,9 +8,10 @@ router.post('/availability/:clientId', async (req, res) => {
     const { clientId } = req.params;
     const { message } = req.body;
     
-    // Extract date from VAPI tool call
-    const toolCall = message?.toolCalls?.[0];
-    const args = toolCall?.function?.arguments;
+    // Extract from VAPI tool call
+    const toolCall = message?.toolCallList?.[0] || message?.toolCalls?.[0];
+    const toolCallId = toolCall?.id;
+    const args = toolCall?.arguments || toolCall?.function?.arguments;
     
     let date;
     if (args) {
@@ -20,7 +21,7 @@ router.post('/availability/:clientId', async (req, res) => {
     
     if (!date) {
       return res.json({ 
-        results: [{ result: 'What date would you like to check availability for?' }] 
+        results: [{ toolCallId, result: 'What date would you like to check availability for?' }] 
       });
     }
 
@@ -29,18 +30,19 @@ router.post('/availability/:clientId', async (req, res) => {
     
     if (!result.success) {
       return res.json({ 
-        results: [{ result: result.error }] 
+        results: [{ toolCallId, result: result.error }] 
       });
     }
 
     if (result.slots.length === 0) {
       return res.json({ 
-        results: [{ result: `No availability on ${date}. ${result.message || 'Would you like to try another date?'}` }] 
+        results: [{ toolCallId, result: `No availability on ${date}. ${result.message || 'Would you like to try another date?'}` }] 
       });
     }
 
     return res.json({ 
       results: [{ 
+        toolCallId,
         result: `Available times on ${date}: ${result.slots.join(', ')}. Which time works best for you?` 
       }] 
     });
@@ -59,23 +61,18 @@ router.post('/book/:clientId', async (req, res) => {
     const { clientId } = req.params;
     const { message } = req.body;
     
-    const toolCall = message?.toolCalls?.[0];
-    const args = toolCall?.function?.arguments;
+    const toolCall = message?.toolCallList?.[0] || message?.toolCalls?.[0];
+    const toolCallId = toolCall?.id;
+    const args = toolCall?.arguments || toolCall?.function?.arguments;
     
     if (!args) {
       return res.json({ 
-        results: [{ result: 'I need your name, phone number, and preferred date and time to book the appointment.' }] 
+        results: [{ toolCallId, result: 'I need your name, phone number, and preferred date and time to book the appointment.' }] 
       });
     }
 
-    const { 
-      customer_name, 
-      customer_phone, 
-      date, 
-      time, 
-      service_type, 
-      notes 
-    } = typeof args === 'string' ? JSON.parse(args) : args;
+    const parsed = typeof args === 'string' ? JSON.parse(args) : args;
+    const { customer_name, customer_phone, date, time, service_type, notes } = parsed;
 
     if (!customer_name || !customer_phone || !date || !time) {
       const missing = [];
@@ -84,23 +81,15 @@ router.post('/book/:clientId', async (req, res) => {
       if (!date) missing.push('the date');
       if (!time) missing.push('the time');
       return res.json({ 
-        results: [{ result: `I still need ${missing.join(' and ')} to complete the booking.` }] 
+        results: [{ toolCallId, result: `I still need ${missing.join(' and ')} to complete the booking.` }] 
       });
     }
 
     console.log(`📅 Booking for client ${clientId}: ${customer_name} on ${date} at ${time}`);
-    const result = await bookAppointment(
-      clientId, 
-      customer_name, 
-      customer_phone, 
-      date, 
-      time, 
-      service_type, 
-      notes
-    );
+    const result = await bookAppointment(clientId, customer_name, customer_phone, date, time, service_type, notes);
 
     return res.json({ 
-      results: [{ result: result.success ? result.message : result.error }] 
+      results: [{ toolCallId, result: result.success ? result.message : result.error }] 
     });
 
   } catch (error) {
