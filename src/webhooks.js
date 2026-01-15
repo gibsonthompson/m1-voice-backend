@@ -1,5 +1,6 @@
 const { createClient } = require('@supabase/supabase-js');
 const axios = require('axios');
+const { sendTelnyxSMS, sendCallNotificationSMS, formatPhoneE164, formatPhoneDisplay } = require('./telnyx-sms');
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
@@ -112,57 +113,8 @@ async function sendLimitReachedEmail(client, limit) {
 }
 
 // ============================================
-// PHONE & GHL HELPER FUNCTIONS
+// VAPI HELPER FUNCTIONS
 // ============================================
-
-// Helper: Format phone number to E.164 format
-function formatPhoneE164(phone) {
-  if (!phone) return null;
-  
-  // Remove all non-digit characters
-  const digits = phone.replace(/\D/g, '');
-  
-  // Handle different lengths
-  if (digits.length === 11 && digits.startsWith('1')) {
-    return `+${digits}`;
-  }
-  if (digits.length === 10) {
-    return `+1${digits}`;
-  }
-  if (digits.length === 11) {
-    return `+${digits}`;
-  }
-  
-  // If already formatted correctly
-  if (phone.startsWith('+') && phone.replace(/\D/g, '').length >= 10) {
-    return phone.replace(/[^\d+]/g, '');
-  }
-  
-  console.log(`⚠️ Invalid phone format: ${phone}`);
-  return null;
-}
-
-// ✅ Format phone to display format: (678) 316-1454
-function formatPhoneDisplay(phone) {
-  if (!phone) return null;
-  
-  // Remove all non-digits
-  const cleaned = phone.replace(/\D/g, '');
-  
-  // Handle 10 digits (US number without country code)
-  if (cleaned.length === 10) {
-    return `(${cleaned.substring(0,3)}) ${cleaned.substring(3,6)}-${cleaned.substring(6)}`;
-  }
-  
-  // Handle 11 digits (US number with country code 1)
-  if (cleaned.length === 11 && cleaned.startsWith('1')) {
-    const without1 = cleaned.substring(1);
-    return `(${without1.substring(0,3)}) ${without1.substring(3,6)}-${without1.substring(6)}`;
-  }
-  
-  // Return as-is if format doesn't match
-  return phone;
-}
 
 // Get VAPI phone number from phoneNumberId
 async function getPhoneNumberFromVapi(phoneNumberId) {
@@ -182,152 +134,10 @@ async function getPhoneNumberFromVapi(phoneNumberId) {
   }
 }
 
-// GHL: Search for contact by phone number
-async function findGHLContact(phone) {
-  try {
-    console.log('🔍 Searching for GHL contact:', phone);
-    
-    const response = await axios.get(
-      `https://services.leadconnectorhq.com/contacts/search/duplicate`,
-      {
-        params: {
-          locationId: process.env.GHL_LOCATION_ID,
-          number: phone
-        },
-        headers: {
-          'Authorization': `Bearer ${process.env.GHL_API_KEY}`,
-          'Version': '2021-07-28'
-        }
-      }
-    );
-    
-    if (response.data && response.data.contact) {
-      console.log('✅ Contact found:', response.data.contact.id);
-      return response.data.contact.id;
-    }
-    
-    console.log('⚠️ Contact not found');
-    return null;
-  } catch (error) {
-    console.error('❌ Error searching contact:', error.response?.data || error.message);
-    return null;
-  }
-}
-
-// GHL: Create new contact
-async function createGHLContact(phone, name = null) {
-  try {
-    console.log('📝 Creating GHL contact:', phone);
-    
-    const contactData = {
-      locationId: process.env.GHL_LOCATION_ID,
-      phone: phone,
-      source: 'CallBird'
-    };
-    
-    // Add name if provided
-    if (name && name !== 'Unknown') {
-      const nameParts = name.split(' ');
-      contactData.firstName = nameParts[0];
-      if (nameParts.length > 1) {
-        contactData.lastName = nameParts.slice(1).join(' ');
-      }
-    }
-    
-    const response = await axios.post(
-      'https://services.leadconnectorhq.com/contacts/',
-      contactData,
-      {
-        headers: {
-          'Authorization': `Bearer ${process.env.GHL_API_KEY}`,
-          'Content-Type': 'application/json',
-          'Version': '2021-07-28'
-        }
-      }
-    );
-    
-    const contactId = response.data.contact.id;
-    console.log('✅ Contact created:', contactId);
-    return contactId;
-  } catch (error) {
-    console.error('❌ Error creating contact:', error.response?.data || error.message);
-    return null;
-  }
-}
-
-// GHL: Send SMS to contact
-async function sendGHLSMS(toPhone, message, businessOwnerName = null) {
-  try {
-    console.log('📱 Preparing to send SMS via GoHighLevel...');
-    console.log('   To:', toPhone);
-    console.log('   Message length:', message.length, 'chars');
-    
-    // Validate environment variables
-    if (!process.env.GHL_API_KEY || !process.env.GHL_LOCATION_ID) {
-      throw new Error('GHL_API_KEY or GHL_LOCATION_ID not configured');
-    }
-    
-    // Format phone to E.164
-    const formattedPhone = formatPhoneE164(toPhone);
-    if (!formattedPhone) {
-      throw new Error(`Invalid phone format: ${toPhone}`);
-    }
-    console.log('   Formatted phone:', formattedPhone);
-    
-    // Step 1: Search for existing contact
-    let contactId = await findGHLContact(formattedPhone);
-    
-    // Step 2: Create contact if doesn't exist
-    if (!contactId) {
-      console.log('📝 Contact does not exist, creating...');
-      contactId = await createGHLContact(formattedPhone, businessOwnerName);
-      if (!contactId) {
-        throw new Error('Failed to create contact');
-      }
-    }
-    
-    // Step 3: Send SMS using contactId
-    console.log('📤 Sending SMS to contactId:', contactId);
-    
-    const response = await axios.post(
-      'https://services.leadconnectorhq.com/conversations/messages',
-      {
-        type: 'SMS',
-        contactId: contactId,
-        message: message
-      },
-      {
-        headers: {
-          'Authorization': `Bearer ${process.env.GHL_API_KEY}`,
-          'Content-Type': 'application/json',
-          'Version': '2021-07-28'
-        }
-      }
-    );
-    
-    console.log('✅ SMS sent via GHL successfully!');
-    console.log('   Conversation ID:', response.data.conversationId);
-    console.log('   Message ID:', response.data.messageId || response.data.id);
-    
-    return true;
-  } catch (error) {
-    console.error('❌ GHL SMS error:', error.response?.data || error.message);
-    
-    // Log detailed error for debugging
-    if (error.response) {
-      console.error('   Status:', error.response.status);
-      console.error('   Data:', JSON.stringify(error.response.data, null, 2));
-    }
-    
-    return false;
-  }
-}
-
 // ============================================
 // TRANSCRIPT EXTRACTION FUNCTIONS (FALLBACKS)
 // ============================================
 
-// Extract customer name from transcript (fallback)
 function extractCustomerName(transcript) {
   const patterns = [
     /my name is (\w+(?:\s+\w+)?)/i,
@@ -352,7 +162,6 @@ function extractCustomerName(transcript) {
   return 'Unknown';
 }
 
-// Extract phone number from transcript (fallback)
 function extractPhoneNumber(transcript) {
   const phonePattern = /(\+?1?\s*\(?[2-9]\d{2}\)?[\s.-]?\d{3}[\s.-]?\d{4})/;
   const match = transcript.match(phonePattern);
@@ -362,14 +171,12 @@ function extractPhoneNumber(transcript) {
   return null;
 }
 
-// Extract email from transcript (fallback)
 function extractEmail(transcript) {
   const emailPattern = /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/;
   const match = transcript.match(emailPattern);
   return match ? match[0] : null;
 }
 
-// Detect urgency level (fallback)
 function detectUrgency(transcript) {
   const lowerTranscript = transcript.toLowerCase();
   
@@ -385,21 +192,20 @@ function detectUrgency(transcript) {
 }
 
 // ============================================
-// ✅ AI-POWERED SUMMARY & DATA EXTRACTION (REPLACES VAPI)
+// AI-POWERED SUMMARY & DATA EXTRACTION
 // ============================================
 async function generateAISummaryAndExtractData(transcript, industry, callerPhone) {
-  console.log('🤖 Generating AI-powered summary and extracting structured data using Claude API');
+  console.log('🤖 Generating AI-powered summary using Claude API');
   
-  // Industry-specific guidance for Claude
   const industryGuidance = {
-    home_services: 'Focus on: the specific problem or issue (be detailed - "water heater leaking" not just "plumbing issue"), property location if mentioned, urgency level (emergency vs routine), and what specific service is needed.',
-    medical: 'Focus on: appointment type (new patient, checkup, follow-up), existing vs new patient status, general reason for visit (HIPAA-compliant - no specific medical details), urgency level, and any insurance questions.',
-    retail: 'Focus on: specific products discussed, customer intent (browsing, purchasing, returning, stock check), product details or specifications mentioned, and visit plans.',
-    professional_services: 'Focus on: general matter type (no confidential details - just category like "business consultation" or "tax preparation"), whether new or existing client, urgency or deadlines, and recommended next steps.',
-    restaurants: 'Focus on: reservation vs takeout/delivery, party size and date/time if reservation, specific menu items if order, dietary restrictions or allergies, special occasions (birthday, anniversary).'
+    home_services: 'Focus on: the specific problem or issue, property location if mentioned, urgency level, and what specific service is needed.',
+    medical: 'Focus on: appointment type, existing vs new patient status, general reason for visit (HIPAA-compliant), urgency level.',
+    retail: 'Focus on: specific products discussed, customer intent, product details or specifications mentioned, and visit plans.',
+    professional_services: 'Focus on: general matter type (no confidential details), whether new or existing client, urgency or deadlines.',
+    restaurants: 'Focus on: reservation vs takeout/delivery, party size and date/time if reservation, specific menu items if order.',
+    salon_spa: 'Focus on: service type, preferred stylist/technician, appointment date/time preferences, new vs returning client.'
   };
 
-  // Build the prompt for Claude
   const prompt = `You are analyzing a phone call transcript for a ${industry} business.
 
 Your task is to extract structured data AND generate a professional summary.
@@ -410,13 +216,13 @@ ${transcript}
 Caller's Phone Number: ${callerPhone}
 
 Instructions:
-1. Extract the customer's name from the transcript (look for phrases like "my name is", "this is", "I'm", etc.)
+1. Extract the customer's name from the transcript
 2. Extract the customer's phone number if they provide one (otherwise use the caller's number provided above)
 3. Extract the customer's email if mentioned
-4. Assess urgency level based on keywords (emergency, urgent, asap, soon, routine, etc.)
+4. Assess urgency level based on keywords
 5. Generate a professional 2-3 sentence summary focusing on: ${industryGuidance[industry] || 'what the customer needs and next steps'}
 
-CRITICAL: Respond with ONLY a valid JSON object. Do not include any text outside the JSON structure. No markdown, no backticks, no explanations.
+CRITICAL: Respond with ONLY a valid JSON object. No markdown, no backticks, no explanations.
 
 JSON Format:
 {
@@ -455,27 +261,22 @@ JSON Format:
     const data = await response.json();
     let responseText = data.content[0].text.trim();
     
-    // Strip markdown code blocks if present
     responseText = responseText.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
     
-    // Parse JSON response
     const extractedData = JSON.parse(responseText);
     
     console.log('✅ AI-extracted data:', {
       name: extractedData.customerName,
       phone: extractedData.customerPhone,
-      email: extractedData.customerEmail,
       urgency: extractedData.urgency
     });
-    console.log('✅ AI-generated summary:', extractedData.summary);
-    console.log('💰 Claude API cost: ~$0.004');
     
     return extractedData;
   } catch (error) {
     console.error('❌ Failed to generate AI summary:', error.message);
     
-    // Fallback to regex extraction if API fails
-    console.log('⚠️ Using fallback extraction due to API error');
+    // Fallback to regex extraction
+    console.log('⚠️ Using fallback extraction');
     
     const customerName = extractCustomerName(transcript);
     const rawCustomerPhone = extractPhoneNumber(transcript) || callerPhone;
@@ -484,16 +285,10 @@ JSON Format:
     const urgency = detectUrgency(transcript);
     
     let fallbackSummary = `${customerName} (${customerPhone}) called`;
-    
     if (urgency === 'high' || urgency === 'emergency') {
       fallbackSummary += ' with an URGENT request';
     }
-    
     fallbackSummary += ` regarding ${industry.replace('_', ' ')} services. Team should follow up promptly.`;
-    
-    if (customerEmail) {
-      fallbackSummary += ` Email: ${customerEmail}`;
-    }
     
     return {
       customerName,
@@ -518,7 +313,6 @@ async function handleVapiWebhook(req, res) {
       const call = message.call;
       const phoneNumberId = call.phoneNumberId;
       
-      // Get the actual phone number
       const phoneNumber = await getPhoneNumberFromVapi(phoneNumberId);
       if (!phoneNumber) {
         console.log('⚠️ Could not get phone number from VAPI');
@@ -541,111 +335,57 @@ async function handleVapiWebhook(req, res) {
       
       console.log('✅ Client found:', client.business_name);
       
-      // ============================================
-      // 🆕 CHECK SUBSCRIPTION STATUS BEFORE PROCESSING
-      // ============================================
+      // Check subscription status
       const validStatuses = ['active', 'trial'];
       const subscriptionStatus = client.subscription_status;
       
-      console.log(`📋 Subscription status: ${subscriptionStatus}`);
-      
       if (!validStatuses.includes(subscriptionStatus)) {
         console.log(`🚫 CALL BLOCKED: ${client.business_name} subscription not active`);
-        console.log(`   Status: ${subscriptionStatus}`);
-        console.log(`   Valid statuses: ${validStatuses.join(', ')}`);
-        
-        // Return success to VAPI but don't process the call
         return res.status(200).json({ 
           received: true,
           blocked: true,
-          reason: 'Subscription not active',
-          subscriptionStatus: subscriptionStatus,
-          message: `Client ${client.business_name} has subscription status: ${subscriptionStatus}. Must be 'active' or 'trial' to process calls.`
+          reason: 'Subscription not active'
         });
       }
       
-      console.log(`✅ Subscription valid: ${subscriptionStatus}`);
-      
-      // ============================================
-      // CHECK CALL LIMITS BEFORE PROCESSING
-      // ============================================
+      // Check call limits
       const currentCallCount = client.calls_this_month || 0;
       const callLimit = client.monthly_call_limit || 100;
       
-      console.log(`📊 Current usage: ${currentCallCount}/${callLimit} calls`);
-      
       if (currentCallCount >= callLimit) {
         console.log(`🚫 CALL BLOCKED: ${client.business_name} has reached limit`);
-        console.log(`   Usage: ${currentCallCount}/${callLimit}`);
-        console.log(`   Plan: ${client.plan_type}`);
         
-        // Send limit reached email if this is the first blocked call
         if (currentCallCount === callLimit) {
-          console.log('📧 Sending limit reached notification...');
           await sendLimitReachedEmail(client, callLimit);
         }
         
-        // Return success to VAPI but don't process the call
         return res.status(200).json({ 
           received: true,
           blocked: true,
-          reason: 'Monthly call limit reached',
-          currentUsage: currentCallCount,
-          limit: callLimit,
-          message: `Client ${client.business_name} has used all ${callLimit} calls for this billing period`
+          reason: 'Monthly call limit reached'
         });
       }
       
-      console.log(`✅ Within limit, processing call...`);
-      
-      // ============================================
-      // ✅ EXTRACT DATA & GENERATE CUSTOM SUMMARY (SINGLE API CALL)
-      // ============================================
+      // Extract data & generate summary
       const transcript = message.transcript || '';
       const callerPhone = call.customer?.number || 'Unknown';
       
-      console.log('📝 Transcript length:', transcript.length, 'chars');
-      
-      // ✅ GENERATE AI-POWERED SUMMARY AND EXTRACT ALL DATA (replaces broken VAPI analysis + regex)
       const aiData = await generateAISummaryAndExtractData(
         transcript,
         client.industry,
         callerPhone
       );
       
-      const customerName = aiData.customerName;
-      const customerPhone = aiData.customerPhone;
-      const customerEmail = aiData.customerEmail;
-      const urgency = aiData.urgency;
-      const aiSummary = aiData.summary;
-      
-      console.log('📊 Extracted data:');
-      console.log('   Customer Name:', customerName);
-      console.log('   Customer Phone:', customerPhone);
-      console.log('   Customer Email:', customerEmail);
-      console.log('   Urgency:', urgency);
-      console.log('   Industry:', client.industry);
-      console.log('   ✅ Generated Summary:', aiSummary);
+      const { customerName, customerPhone, customerEmail, urgency, summary: aiSummary } = aiData;
 
-      // ============================================
-      // EXTRACT RECORDING URL FROM VAPI
-      // ============================================
+      // Extract recording URL
       const recordingUrl = 
         message.recordingUrl ||
         message.artifact?.recordingUrl ||
         call.recordingUrl ||
-        message.recording?.url ||
         null;
-      
-      if (recordingUrl) {
-        console.log('🎵 Recording URL found:', recordingUrl);
-      } else {
-        console.log('⚠️ No recording URL in webhook payload');
-      }
 
-      // ============================================
-      // SAVE TO DATABASE
-      // ============================================
+      // Save to database
       const callRecord = {
         client_id: client.id,
         customer_name: customerName,
@@ -655,8 +395,6 @@ async function handleVapiWebhook(req, res) {
         recording_url: recordingUrl,
         created_at: new Date().toISOString()
       };
-      
-      console.log('💾 Saving call to Supabase...');
       
       const { data: insertedCall, error: insertError } = await supabase
         .from('calls')
@@ -670,105 +408,49 @@ async function handleVapiWebhook(req, res) {
       
       console.log('✅ Call saved successfully');
       
-      // ============================================
-      // 🆕 TRACK CALL USAGE, CHECK LIMITS & FIRST CALL
-      // ============================================
-      console.log('📊 Tracking call usage...');
+      // Track call usage
+      const newCallCount = currentCallCount + 1;
+      const isFirstCall = newCallCount === 1;
       
-       const newCallCount = currentCallCount + 1;
-       
-      try {
-        // Increment call counter
-       
-        
-        // 🆕 CHECK IF THIS IS THE FIRST CALL
-        const isFirstCall = newCallCount === 1;
-        
-        // Prepare update object
-        const updateData = { calls_this_month: newCallCount };
-        
-        // 🆕 If first call, mark it!
-        if (isFirstCall) {
-          updateData.first_call_received = true;
-          console.log('🎉 FIRST CALL EVER for client:', client.business_name);
+      const updateData = { calls_this_month: newCallCount };
+      if (isFirstCall) {
+        updateData.first_call_received = true;
+        console.log('🎉 FIRST CALL EVER for client:', client.business_name);
+      }
+      
+      await supabase
+        .from('clients')
+        .update(updateData)
+        .eq('id', client.id);
+      
+      // Check usage thresholds
+      const usagePercent = (newCallCount / callLimit) * 100;
+      if (usagePercent >= 80 && usagePercent < 100) {
+        if (newCallCount === Math.floor(callLimit * 0.8)) {
+          await sendUsageWarningEmail(client, newCallCount, callLimit);
         }
-        
-        await supabase
-          .from('clients')
-          .update(updateData)
-          .eq('id', client.id);
-        
-        console.log(`✅ Call count updated: ${newCallCount}/${callLimit}`);
-        
-        // 🆕 Log first call celebration
-        if (isFirstCall) {
-          console.log('🎊 First call celebration will trigger on next dashboard visit!');
+      }
+      
+      if (newCallCount >= callLimit) {
+        if (newCallCount === callLimit) {
+          await sendLimitReachedEmail(client, callLimit);
         }
-        
-        // Check if approaching limit (80%)
-        const usagePercent = (newCallCount / callLimit) * 100;
-        if (usagePercent >= 80 && usagePercent < 100) {
-          console.log(`⚠️ Client ${client.email} at ${usagePercent.toFixed(0)}% of call limit`);
-          
-          // Send warning email at exactly 80%
-          if (newCallCount === Math.floor(callLimit * 0.8)) {
-            await sendUsageWarningEmail(client, newCallCount, callLimit);
-          }
-        }
-        
-        // Check if limit just reached (100%)
-        if (newCallCount >= callLimit) {
-          console.log(`🚨 Client ${client.email} reached call limit!`);
-          
-          // Send limit reached email (only once at exactly the limit)
-          if (newCallCount === callLimit) {
-            await sendLimitReachedEmail(client, callLimit);
-          }
-        }
-      } catch (usageError) {
-        console.error('⚠️ Usage tracking error (non-blocking):', usageError.message);
       }
       
       // ============================================
-      // SEND SMS NOTIFICATION
+      // SEND SMS NOTIFICATION VIA TELNYX (REPLACES GHL)
       // ============================================
       let smsSent = false;
       
       if (client.owner_phone) {
-        console.log('📱 Preparing SMS notification via GHL...');
-        console.log('   Raw owner_phone from DB:', client.owner_phone);
+        console.log('📱 Sending SMS notification via Telnyx...');
         
-        // Format phone number to E.164
-        const formattedPhone = formatPhoneE164(client.owner_phone);
-        console.log('   Formatted to E.164:', formattedPhone);
+        smsSent = await sendCallNotificationSMS(client, aiData);
         
-        if (!formattedPhone) {
-          console.log('❌ Could not format owner phone number:', client.owner_phone);
+        if (smsSent) {
+          console.log('✅ SMS notification sent via Telnyx');
         } else {
-          // Build SMS message
-          let smsMessage = `🔔 New Call - ${client.business_name}\n\n`;
-          smsMessage += `Customer: ${customerName}\n`;
-          smsMessage += `Phone: ${customerPhone}\n`;
-          if (customerEmail) {
-            smsMessage += `Email: ${customerEmail}\n`;
-          }
-          if (urgency === 'high' || urgency === 'emergency') {
-            smsMessage += `⚠️ Urgency: HIGH\n`;
-          }
-          smsMessage += `\nSummary: ${aiSummary}\n\n`;
-          smsMessage += `View full details in your CallBird dashboard.`;
-          
-          console.log('📝 SMS message prepared');
-          
-          // Send via GHL (with business owner's first name for contact creation)
-          const ownerFirstName = client.business_name ? client.business_name.split(' ')[0] : null;
-          smsSent = await sendGHLSMS(formattedPhone, smsMessage, ownerFirstName);
-          
-          if (smsSent) {
-            console.log('✅ SMS notification sent successfully via GHL');
-          } else {
-            console.log('⚠️ SMS notification failed via GHL');
-          }
+          console.log('⚠️ SMS notification failed');
         }
       } else {
         console.log('⚠️ No owner_phone configured for this client');
@@ -780,15 +462,9 @@ async function handleVapiWebhook(req, res) {
         callId: insertedCall[0]?.id,
         smsSent: smsSent,
         usageTracked: true,
-        firstCall: newCallCount === 1, // 🆕 Return first call flag
+        firstCall: isFirstCall,
         recordingUrl: recordingUrl,
-        extractedData: {
-          customerName,
-          customerPhone,
-          customerEmail,
-          urgency,
-          summary: aiSummary
-        }
+        extractedData: aiData
       });
     }
     
@@ -799,12 +475,9 @@ async function handleVapiWebhook(req, res) {
   }
 }
 
-// ============================================
-// 🆕 EXPORT HELPER FUNCTIONS FOR DEMO WEBHOOK
-// ============================================
 module.exports = { 
   handleVapiWebhook,
-  sendGHLSMS,
+  sendTelnyxSMS,
   formatPhoneE164,
   formatPhoneDisplay
 };
