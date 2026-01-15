@@ -47,9 +47,6 @@ function formatPhoneDisplay(phone) {
 
 /**
  * Send SMS via Telnyx
- * @param {string} toPhone - Recipient phone number
- * @param {string} message - SMS message content
- * @returns {Promise<boolean>} - Success status
  */
 async function sendTelnyxSMS(toPhone, message) {
   try {
@@ -57,7 +54,6 @@ async function sendTelnyxSMS(toPhone, message) {
     console.log('   To:', toPhone);
     console.log('   Message length:', message.length, 'chars');
     
-    // Validate environment variables
     if (!process.env.TELNYX_API_KEY) {
       throw new Error('TELNYX_API_KEY not configured');
     }
@@ -68,14 +64,12 @@ async function sendTelnyxSMS(toPhone, message) {
       throw new Error('TELNYX_SMS_FROM_NUMBER not configured');
     }
     
-    // Format phone to E.164
     const formattedPhone = formatPhoneE164(toPhone);
     if (!formattedPhone) {
       throw new Error(`Invalid phone format: ${toPhone}`);
     }
     console.log('   Formatted phone:', formattedPhone);
     
-    // Send SMS via Telnyx API
     const response = await fetch('https://api.telnyx.com/v2/messages', {
       method: 'POST',
       headers: {
@@ -109,9 +103,6 @@ async function sendTelnyxSMS(toPhone, message) {
 
 /**
  * Send call notification SMS to business owner
- * @param {Object} client - Client record from database
- * @param {Object} callData - Extracted call data
- * @returns {Promise<boolean>}
  */
 async function sendCallNotificationSMS(client, callData) {
   const { customerName, customerPhone, customerEmail, urgency, summary } = callData;
@@ -133,26 +124,42 @@ async function sendCallNotificationSMS(client, callData) {
 
 /**
  * Send welcome SMS to new signup
- * @param {string} phone - Customer phone number
- * @param {string} businessName - Business name
- * @param {string} aiPhoneNumber - The provisioned AI phone number
- * @returns {Promise<boolean>}
  */
 async function sendWelcomeSMS(phone, businessName, aiPhoneNumber) {
   const message = `🎉 Welcome to CallBird!\n\n` +
     `Your AI receptionist for ${businessName} is ready!\n\n` +
     `📞 Your AI Phone: ${formatPhoneDisplay(aiPhoneNumber)}\n\n` +
-    `Forward your business line to this number, or use it directly.\n\n` +
     `Check your email for login details.\n\n` +
-    `Questions? Reply to this text or call (678) 316-1454`;
+    `Questions? Reply to this text.`;
   
   return sendTelnyxSMS(phone, message);
+}
+
+/**
+ * Send admin notification SMS on new signup
+ */
+async function sendAdminSignupNotification(signupData) {
+  const { businessName, ownerName, email, phone, city, state, industry, website, referralSource, aiPhoneNumber } = signupData;
+  
+  const message = `🆕 New CallBird Signup!\n\n` +
+    `Business: ${businessName}\n` +
+    `Owner: ${ownerName}\n` +
+    `Email: ${email}\n` +
+    `Phone: ${formatPhoneDisplay(phone)}\n` +
+    `Location: ${city}, ${state}\n` +
+    `Industry: ${industry}\n` +
+    `Website: ${website || 'None'}\n` +
+    `Referral: ${referralSource || 'None'}\n` +
+    `AI Phone: ${formatPhoneDisplay(aiPhoneNumber)}`;
+  
+  return sendTelnyxSMS('+16783161454', message);
 }
 
 module.exports = {
   sendTelnyxSMS,
   sendCallNotificationSMS,
   sendWelcomeSMS,
+  sendAdminSignupNotification,
   formatPhoneE164,
   formatPhoneDisplay
 };

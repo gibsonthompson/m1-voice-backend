@@ -7,7 +7,7 @@ const { Resend } = require('resend');
 const { createKnowledgeBaseFromWebsite } = require('./website-scraper');
 const { provisionLocalPhone } = require('./phone-provisioning');
 const { createIndustryAssistant } = require('./vapi-assistant-config');
-const { sendWelcomeSMS } = require('./telnyx-sms');
+const { sendWelcomeSMS, sendAdminSignupNotification } = require('./telnyx-sms');
 
 // Initialize services
 const supabase = createClient(
@@ -395,6 +395,25 @@ async function handleNativeSignup(req, res) {
       }
     } catch (smsError) {
       console.error('⚠️ SMS error (non-blocking):', smsError.message);
+
+    // Send admin signup notification
+    try {
+      await sendAdminSignupNotification({
+        businessName,
+        ownerName,
+        email,
+        phone: formattedOwnerPhone,
+        city: businessCity,
+        state: businessState,
+        industry,
+        website: websiteUrl,
+        referralSource,
+        aiPhoneNumber: phoneData.number
+      });
+      console.log('✅ Admin signup notification sent');
+    } catch (adminErr) {
+      console.error('⚠️ Admin notification failed (non-blocking):', adminErr.message);
+    }
     }
 
     // ============================================
