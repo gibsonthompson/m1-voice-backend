@@ -30,7 +30,7 @@ app.set('trust proxy', 1);
 // CORS - Allow frontend access
 // ============================================
 app.use(cors({
-  origin: ['https://app.callbirdai.com', 'http://localhost:3000'],
+  origin: ['https://app.callbirdai.com', 'https://callbirdai.com', 'https://call-bird-site.vercel.app', 'http://localhost:3000'],
   credentials: true
 }));
 
