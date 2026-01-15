@@ -18,7 +18,7 @@ const {
 // ============================================
 
 // NEW: Native Form Signup - Direct from callbirdai.com (no GHL dependency)
-router.post('/api/signup', handleNativeSignup);
+router.post('/signup', handleNativeSignup);
 
 // LEGACY: GHL Form Signup - Creates client + VAPI assistant (keep for backwards compatibility)
 router.post('/webhooks/ghl-signup', handleGHLSignup);
