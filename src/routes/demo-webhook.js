@@ -1,8 +1,7 @@
 const express = require('express');
 const router = express.Router();
-
-// Import SMS helper from webhooks.js
-const { sendGHLSMS, formatPhoneE164 } = require('../webhooks');
+// Import SMS helper from telnyx-sms.js
+const { sendTelnyxSMS, formatPhoneE164 } = require('../telnyx-sms');
 
 // ============================================
 // DEMO TRIAL SIGNUP WEBHOOK (SIMPLIFIED)
@@ -22,7 +21,7 @@ router.post('/demo-trial-signup', async (req, res) => {
         result: "Thanks for your interest! Visit CallBird.ai to get started."
       });
     }
-
+    
     // Parse phone number and business name
     let args = typeof functionCall.arguments === 'string' 
       ? JSON.parse(functionCall.arguments) 
@@ -33,7 +32,7 @@ router.post('/demo-trial-signup', async (req, res) => {
     console.log('📞 Extracted data:');
     console.log('   Phone:', phone_number);
     console.log('   Business:', business_name);
-
+    
     // Validate and format phone
     const phone = formatPhoneE164(phone_number);
     if (!phone) {
@@ -41,12 +40,12 @@ router.post('/demo-trial-signup', async (req, res) => {
         result: "I couldn't validate that phone number. Can you verify it?"
       });
     }
-
+    
     // RESPOND TO VAPI IMMEDIATELY (< 1.5 seconds)
     res.status(200).json({
       result: "Perfect! I'm texting you the signup link right now. Check your phone!"
     });
-
+    
     // Send SMS asynchronously (after VAPI response)
     sendDemoSMS(phone, business_name).catch(err => {
       console.error('❌ SMS send error:', err);
@@ -78,7 +77,7 @@ No credit card required. Questions? Reply to this text.
 - The CallBird Team`;
 
   try {
-    const sent = await sendGHLSMS(phone, message, businessName);
+    const sent = await sendTelnyxSMS(phone, message);
     
     if (sent) {
       console.log('✅ Demo SMS sent successfully to:', phone);
