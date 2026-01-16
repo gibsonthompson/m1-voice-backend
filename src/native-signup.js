@@ -395,8 +395,13 @@ async function handleNativeSignup(req, res) {
       }
     } catch (smsError) {
       console.error('⚠️ SMS error (non-blocking):', smsError.message);
+    }
 
-    // Send admin signup notification
+    // ============================================
+    // STEP 8B: SEND ADMIN SIGNUP NOTIFICATION
+    // ============================================
+    console.log('📱 Sending admin signup notification...');
+    
     try {
       await sendAdminSignupNotification({
         businessName,
@@ -413,7 +418,6 @@ async function handleNativeSignup(req, res) {
       console.log('✅ Admin signup notification sent');
     } catch (adminErr) {
       console.error('⚠️ Admin notification failed (non-blocking):', adminErr.message);
-    }
     }
 
     // ============================================
