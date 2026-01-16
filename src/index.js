@@ -17,6 +17,7 @@ const vapiWebhook = require('./webhooks');
 const { runTrialManager } = require('./cron/trial-manager');
 const { updateKnowledgeBase } = require('./knowledge-base');
 const { updateAssistantCalendar } = require('./calendar-tools');
+const { updateAssistantCalcom } = require('./calcom-tools');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -71,13 +72,25 @@ app.use('/webhook/vapi', demoWebhook);
 app.post('/api/knowledge-base/update', updateKnowledgeBase);
 
 // ============================================
-// 🆕 CALENDAR BOOKING - VAPI TOOL
+// 🆕 CALENDAR BOOKING - VAPI TOOL (GOOGLE)
 // ============================================
 const calendarRoutes = require('./routes/calendar');
 app.use('/api/calendar', calendarRoutes);
 
 // ============================================
-// �� UPDATE ASSISTANT CALENDAR
+// 🆕 CAL.COM BOOKING - VAPI TOOL
+// ============================================
+const calcomRoutes = require('./routes/calcom');
+app.use('/api/calcom', calcomRoutes);
+
+// ============================================
+// 🆕 CAL.COM SETTINGS - DASHBOARD CONNECTION
+// ============================================
+const calcomSettingsRoutes = require('./routes/calcom-settings');
+app.use('/api/calcom/settings', calcomSettingsRoutes);
+
+// ============================================
+// 📅 UPDATE ASSISTANT CALENDAR (GOOGLE)
 // ============================================
 app.post('/api/assistant/update-calendar', async (req, res) => {
   try {
@@ -96,6 +109,30 @@ app.post('/api/assistant/update-calendar', async (req, res) => {
     }
   } catch (error) {
     console.error('Update calendar error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// ============================================
+// 🆕 UPDATE ASSISTANT CAL.COM
+// ============================================
+app.post('/api/assistant/update-calcom', async (req, res) => {
+  try {
+    const { assistantId, clientId, enabled } = req.body;
+    
+    if (!assistantId || !clientId) {
+      return res.status(400).json({ error: 'Missing assistantId or clientId' });
+    }
+
+    const result = await updateAssistantCalcom(assistantId, clientId, enabled);
+    
+    if (result.success) {
+      res.json({ success: true, message: `Cal.com ${enabled ? 'enabled' : 'disabled'}`, toolIds: result.toolIds });
+    } else {
+      res.status(500).json({ error: result.error || 'Failed to update assistant' });
+    }
+  } catch (error) {
+    console.error('Update Cal.com error:', error);
     res.status(500).json({ error: 'Server error' });
   }
 });
@@ -170,7 +207,10 @@ app.get('/', (req, res) => {
       stripe: '/api/webhooks/stripe',
       knowledgeBase: '/api/knowledge-base/update',
       calendar: '/api/calendar/*',
+      calcom: '/api/calcom/*',
+      calcomSettings: '/api/calcom/settings/*',
       assistantCalendar: '/api/assistant/update-calendar',
+      assistantCalcom: '/api/assistant/update-calcom',
       cron: '/api/cron/check-trials',
       admin: '/api/admin/trigger-trial-check',
       api: '/api/*'
@@ -217,7 +257,7 @@ app.use((req, res) => {
 // START SERVER
 // ============================================
 app.listen(PORT, '0.0.0.0', () => {
-  console.log(`�� Server running on port ${PORT}`);
+  console.log(`🚀 Server running on port ${PORT}`);
   console.log(`📅 Started at: ${new Date().toISOString()}`);
   console.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
   console.log(`\n✅ Service Status:`);
@@ -237,7 +277,9 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log(`   POST /api/webhooks/stripe - Stripe payment webhooks`);
   console.log(`   POST /api/webhooks/ghl-signup - GoHighLevel signups`);
   console.log(`   POST /api/knowledge-base/update - Knowledge base updates`);
-  console.log(`   POST /api/assistant/update-calendar - Calendar assistant updates`);
+  console.log(`   POST /api/assistant/update-calendar - Google Calendar updates`);
+  console.log(`   POST /api/assistant/update-calcom - Cal.com updates`);
+  console.log(`   GET  /api/calcom/settings/* - Cal.com connection management`);
   console.log(`   POST /api/cron/check-trials - Automated trial checks`);
   console.log(`   POST /api/admin/trigger-trial-check - Manual trial check`);
 });
