@@ -320,51 +320,41 @@ async function handleNativeSignup(req, res) {
           <!DOCTYPE html>
           <html>
           <head>
-            <style>
-              body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
-              .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-              .header { text-align: center; margin-bottom: 30px; }
-              .logo { width: 150px; }
-              .highlight-box { background: #f0f4ff; border-left: 4px solid #122092; padding: 20px; margin: 20px 0; border-radius: 4px; }
-              .phone-number { font-size: 24px; font-weight: bold; color: #122092; }
-              .btn { display: inline-block; background: #122092; color: white; padding: 14px 28px; text-decoration: none; border-radius: 6px; font-weight: bold; margin: 20px 0; }
-              .footer { margin-top: 40px; padding-top: 20px; border-top: 1px solid #eee; font-size: 14px; color: #666; }
-            </style>
+            <meta charset="utf-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
           </head>
-          <body>
-            <div class="container">
-              <div class="header">
-                <img src="https://i.imgur.com/qwyQQW5.png" alt="CallBird" class="logo">
+          <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333333; margin: 0; padding: 0; background-color: #f9f9f9;">
+            <div style="max-width: 600px; margin: 0 auto; padding: 20px; background-color: #ffffff;">
+              <div style="text-align: center; margin-bottom: 30px;">
+                <img src="https://i.imgur.com/qwyQQW5.png" alt="CallBird" style="width: 150px; height: auto;">
               </div>
               
-              <h1>Welcome to CallBird, ${firstName}! 🎉</h1>
+              <h1 style="color: #122092; font-size: 24px; margin-bottom: 20px;">Welcome to CallBird, ${firstName}! 🎉</h1>
               
-              <p>Your AI receptionist for <strong>${businessName}</strong> is ready to start answering calls.</p>
+              <p style="font-size: 16px; color: #333333; margin-bottom: 20px;">Your AI receptionist for <strong>${businessName}</strong> is ready to start answering calls.</p>
               
-              <div class="highlight-box">
-                <p style="margin: 0 0 10px 0;"><strong>Your AI Phone Number:</strong></p>
-                <p class="phone-number">${phoneData.number}</p>
-                <p style="margin: 10px 0 0 0; font-size: 14px;">Location: ${businessCity}, ${businessState}</p>
+              <div style="background-color: #f0f4ff; border-left: 4px solid #122092; padding: 20px; margin: 20px 0; border-radius: 4px;">
+                <p style="margin: 0 0 10px 0; font-size: 14px; color: #333333;"><strong>Your AI Phone Number:</strong></p>
+                <p style="font-size: 24px; font-weight: bold; color: #122092; margin: 0;">${phoneData.number}</p>
+                <p style="margin: 10px 0 0 0; font-size: 14px; color: #666666;">Location: ${businessCity}, ${businessState}</p>
               </div>
               
-              <p><strong>Next Steps:</strong></p>
-              <ol>
-                <li>Set your password to access your dashboard</li>
-                <li>Forward your business line to your new AI number</li>
-                <li>Start receiving call summaries instantly!</li>
+              <p style="font-size: 16px; color: #333333;"><strong>Next Steps:</strong></p>
+              <ol style="font-size: 16px; color: #333333; padding-left: 20px;">
+                <li style="margin-bottom: 8px;">Set your password to access your dashboard</li>
+                <li style="margin-bottom: 8px;">Forward your business line to your new AI number</li>
+                <li style="margin-bottom: 8px;">Start receiving call summaries instantly!</li>
               </ol>
               
-              <center>
-                <a href="https://app.callbirdai.com/auth/set-password?token=${token}" class="btn">
-                  Set Your Password →
-                </a>
-              </center>
+              <div style="text-align: center; margin: 30px 0;">
+                <a href="https://app.callbirdai.com/auth/set-password?token=${token}" style="display: inline-block; background-color: #122092; color: #ffffff; padding: 14px 28px; text-decoration: none; border-radius: 6px; font-weight: bold; font-size: 16px;">Set Your Password →</a>
+              </div>
               
-              <p>Your <strong>7-day free trial</strong> has started. No credit card required.</p>
+              <p style="font-size: 16px; color: #333333;">Your <strong>7-day free trial</strong> has started. No credit card required.</p>
               
-              <div class="footer">
-                <p>Questions? Reply to this email or call us at <a href="tel:+16783161454">(678) 316-1454</a></p>
-                <p>© 2025 CallBird AI • Atlanta, GA</p>
+              <div style="margin-top: 40px; padding-top: 20px; border-top: 1px solid #eeeeee; font-size: 14px; color: #666666;">
+                <p style="margin: 0 0 8px 0;">Questions? Reply to this email or call us at <a href="tel:+16783161454" style="color: #122092;">(678) 316-1454</a></p>
+                <p style="margin: 0;">© 2025 CallBird AI • Atlanta, GA</p>
               </div>
             </div>
           </body>
