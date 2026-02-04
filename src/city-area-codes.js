@@ -50,8 +50,6 @@ const cityAreaCodes = {
   'Riverside': ['951'],
   'Stockton': ['209'],
   'Irvine': ['949', '714'],
-  
-  // Add more cities as needed
 };
 
 // ALL 50 STATES + DC
@@ -107,6 +105,61 @@ const stateAreaCodes = {
   'WV': ['304', '681'],
   'WI': ['262', '414', '534', '608', '715', '920'],
   'WY': ['307'],
+};
+
+// NEIGHBORING STATES FOR FALLBACK
+const neighboringStates = {
+  'AL': ['GA', 'FL', 'MS', 'TN'],
+  'AK': [],
+  'AZ': ['NV', 'CA', 'NM', 'UT', 'CO'],
+  'AR': ['MO', 'TN', 'MS', 'LA', 'TX', 'OK'],
+  'CA': ['OR', 'NV', 'AZ'],
+  'CO': ['WY', 'NE', 'KS', 'OK', 'NM', 'UT'],
+  'CT': ['NY', 'MA', 'RI'],
+  'DE': ['PA', 'NJ', 'MD'],
+  'DC': ['MD', 'VA'],
+  'FL': ['GA', 'AL'],
+  'GA': ['FL', 'AL', 'TN', 'NC', 'SC'],
+  'HI': [],
+  'ID': ['WA', 'OR', 'NV', 'UT', 'WY', 'MT'],
+  'IL': ['WI', 'IA', 'MO', 'KY', 'IN'],
+  'IN': ['MI', 'OH', 'KY', 'IL'],
+  'IA': ['MN', 'WI', 'IL', 'MO', 'NE', 'SD'],
+  'KS': ['NE', 'MO', 'OK', 'CO'],
+  'KY': ['OH', 'WV', 'VA', 'TN', 'MO', 'IL', 'IN'],
+  'LA': ['AR', 'MS', 'TX'],
+  'ME': ['NH'],
+  'MD': ['PA', 'DE', 'VA', 'WV', 'DC'],
+  'MA': ['NH', 'VT', 'NY', 'CT', 'RI'],
+  'MI': ['OH', 'IN', 'WI'],
+  'MN': ['WI', 'IA', 'SD', 'ND'],
+  'MS': ['TN', 'AL', 'LA', 'AR'],
+  'MO': ['IA', 'IL', 'KY', 'TN', 'AR', 'OK', 'KS', 'NE'],
+  'MT': ['ND', 'SD', 'WY', 'ID'],
+  'NE': ['SD', 'IA', 'MO', 'KS', 'CO', 'WY'],
+  'NV': ['OR', 'ID', 'UT', 'AZ', 'CA'],
+  'NH': ['ME', 'MA', 'VT'],
+  'NJ': ['NY', 'PA', 'DE'],
+  'NM': ['CO', 'OK', 'TX', 'AZ', 'UT'],
+  'NY': ['VT', 'MA', 'CT', 'NJ', 'PA'],
+  'NC': ['VA', 'TN', 'GA', 'SC'],
+  'ND': ['MN', 'SD', 'MT'],
+  'OH': ['MI', 'IN', 'KY', 'WV', 'PA'],
+  'OK': ['KS', 'MO', 'AR', 'TX', 'NM', 'CO'],
+  'OR': ['WA', 'ID', 'NV', 'CA'],
+  'PA': ['NY', 'NJ', 'DE', 'MD', 'WV', 'OH'],
+  'RI': ['MA', 'CT'],
+  'SC': ['NC', 'GA'],
+  'SD': ['ND', 'MN', 'IA', 'NE', 'WY', 'MT'],
+  'TN': ['KY', 'VA', 'NC', 'GA', 'AL', 'MS', 'AR', 'MO'],
+  'TX': ['NM', 'OK', 'AR', 'LA'],
+  'UT': ['ID', 'WY', 'CO', 'NM', 'AZ', 'NV'],
+  'VT': ['NH', 'MA', 'NY'],
+  'VA': ['MD', 'WV', 'KY', 'TN', 'NC', 'DC'],
+  'WA': ['OR', 'ID'],
+  'WV': ['PA', 'MD', 'VA', 'KY', 'OH'],
+  'WI': ['MI', 'MN', 'IA', 'IL'],
+  'WY': ['MT', 'SD', 'NE', 'CO', 'UT', 'ID'],
 };
 
 const stateNameToAbbr = {
@@ -192,4 +245,7 @@ function getAreaCodesForCity(city, state) {
 
 module.exports = {
   getAreaCodesForCity,
+  stateAreaCodes,
+  neighboringStates,
+  normalizeState,
 };
